@@ -1,4 +1,4 @@
-package com.example.emotionbudget.data
+package com.example.emotionbudgetapp.data
 
 // 지출 기록 1개를 표현하는 데이터 클래스
 // 금액, 카테고리, 감정, 메모를 하나의 객체로 관리한다.
