@@ -1,11 +1,11 @@
-package com.example.emotionbudget
+package com.example.emotionbudgetapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.emotionbudget.ui.ExpenseScreen
-import com.example.emotionbudget.viewmodel.ExpenseViewModel
+import com.example.emotionbudgetapp.ui.ExpenseScreen
+import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
 
 class MainActivity : ComponentActivity() {
 
