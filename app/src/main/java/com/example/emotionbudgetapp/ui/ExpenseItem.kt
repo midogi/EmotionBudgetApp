@@ -1,47 +1,119 @@
 package com.example.emotionbudgetapp.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.dp
 import com.example.emotionbudgetapp.data.Expense
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun ExpenseItem(
     expense: Expense,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(text = "${expense.amount}원")
-            Text(text = "카테고리: ${expense.category}")
-            Text(text = "감정: ${expense.emotion}")
-
-            if (expense.memo.isNotBlank()) {
-                Text(text = "메모: ${expense.memo}")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = expense.category,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF172033)
+                    )
+                    Text(
+                        text = "감정: ${expense.emotion}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF5D6B82)
+                    )
+                }
+                Text(
+                    text = formatAmount(expense.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F766E)
+                )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = onDelete,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("삭제")
+                InfoBadge(text = expense.category)
+                InfoBadge(text = expense.emotion)
+            }
+
+            if (expense.memo.isNotBlank()) {
+                Text(
+                    text = expense.memo,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF263244)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDelete) {
+                    Text("삭제")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun InfoBadge(text: String) {
+    Surface(
+        color = Color(0xFFE8F0F2),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF2F5D62)
+            )
+        }
+    }
+}
+
+private fun formatAmount(amount: Int): String {
+    return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
 }
