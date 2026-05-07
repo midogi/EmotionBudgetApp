@@ -34,6 +34,12 @@ class ExpenseViewModel : ViewModel() {
         _expenses.value = _expenses.value + newExpense
     }
 
+    fun updateExpense(updatedExpense: Expense) {
+        _expenses.value = _expenses.value.map {
+            if (it.id == updatedExpense.id) updatedExpense else it
+        }
+    }
+
     fun deleteExpense(expense: Expense) {
         // 선택한 id와 다른 기록만 남겨서 삭제 효과를 만든다.
         _expenses.value = _expenses.value.filter { it.id != expense.id }

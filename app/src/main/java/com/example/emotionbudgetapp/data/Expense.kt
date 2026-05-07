@@ -7,5 +7,6 @@ data class Expense(
     val amount: Int,      // 지출 금액
     val category: String, // 식비, 교통, 쇼핑 등 지출 분류
     val emotion: String,  // 지출 당시의 감정
-    val memo: String      // 사용자가 남기는 간단한 메모
+    val memo: String,     // 사용자가 남기는 간단한 메모
+    val createdAt: Long = System.currentTimeMillis() // 생성 시각
 )
