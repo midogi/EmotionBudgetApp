@@ -25,6 +25,7 @@ import java.util.Locale
 @Composable
 fun ExpenseItem(
     expense: Expense,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     ElevatedCard(
@@ -86,6 +87,9 @@ fun ExpenseItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = onEdit) {
+                    Text("수정")
+                }
                 TextButton(onClick = onDelete) {
                     Text("삭제")
                 }
