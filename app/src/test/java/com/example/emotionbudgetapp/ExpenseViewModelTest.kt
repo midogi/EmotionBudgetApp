@@ -10,6 +10,7 @@ class ExpenseViewModelTest {
     fun addExpense_recordsAllFields() {
         val viewModel = ExpenseViewModel()
 
+        // 지출을 추가했을 때 금액/카테고리/감정/메모/날짜가 모두 저장되는지 확인한다.
         viewModel.addExpense(
             amount = 12000,
             category = "식비",
@@ -32,6 +33,7 @@ class ExpenseViewModelTest {
         viewModel.addExpense(5000, "카페", "평온", "커피", 1000L)
         val id = viewModel.expenses.value.single().id
 
+        // 같은 id의 기록을 수정하면 새 값으로 교체되고 id는 유지되어야 한다.
         viewModel.updateExpense(
             id = id,
             amount = 7000,
@@ -57,6 +59,7 @@ class ExpenseViewModelTest {
         viewModel.addExpense(9000, "식비", "스트레스", "야식", 2000L)
         val firstExpense = viewModel.expenses.value.first()
 
+        // 삭제한 기록만 빠지고 나머지 기록은 유지되는지 확인한다.
         viewModel.deleteExpense(firstExpense)
 
         assertEquals(1, viewModel.expenses.value.size)
@@ -70,6 +73,7 @@ class ExpenseViewModelTest {
         viewModel.addExpense(5000, "카페", "기쁨", "", 2000L)
         viewModel.addExpense(7000, "교통", "평온", "", 3000L)
 
+        // 같은 카테고리끼리 금액을 묶는 집계 로직을 검증한다.
         val totals = viewModel.getCategoryTotals()
 
         assertEquals(8000, totals["카페"])
