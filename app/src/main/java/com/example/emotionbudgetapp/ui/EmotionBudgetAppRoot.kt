@@ -20,10 +20,14 @@ import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
 
 @Composable
 fun EmotionBudgetAppRoot(viewModel: ExpenseViewModel) {
+    // Root 화면은 ViewModel의 지출 목록을 읽어서 하위 화면들에 전달한다.
     val expenses by viewModel.expenses.collectAsState()
+
+    // 현재는 Navigation 라이브러리 없이 Boolean 상태로 화면 전환을 처리한다.
     var showEmotionAnalysis by remember { mutableStateOf(false) }
 
     if (showEmotionAnalysis) {
+        // 감정 분석 화면은 목록을 보기만 하므로 expenses List와 뒤로가기 콜백만 받는다.
         EmotionAnalysisScreen(
             expenses = expenses,
             onBack = { showEmotionAnalysis = false }
@@ -32,7 +36,10 @@ fun EmotionBudgetAppRoot(viewModel: ExpenseViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // 기본 가계부 입력/목록 화면.
         ExpenseScreen(viewModel = viewModel)
+
+        // 어디서든 감정 분석으로 넘어갈 수 있게 메인 화면 위에 버튼을 띄운다.
         Button(
             onClick = { showEmotionAnalysis = true },
             modifier = Modifier
