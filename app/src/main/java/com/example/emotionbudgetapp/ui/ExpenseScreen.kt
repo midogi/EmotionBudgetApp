@@ -47,11 +47,21 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseScreen(viewModel: ExpenseViewModel) {
     val expenses by viewModel.expenses.collectAsState()
+    var showReport by remember { mutableStateOf(false) }
+
+    if (showReport) {
+        LedgerReportScreen(
+            expenses = expenses,
+            onBack = { showReport = false }
+        )
+        return
+    }
 
     var amountText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("식비") }
@@ -120,7 +130,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     totalAmount = totalAmount,
                     recordCount = expenses.size,
                     topEmotion = topEmotion,
-                    biggestAmount = biggestAmount
+                    biggestAmount = biggestAmount,
+                    onReportClick = { showReport = true }
                 )
             }
 
@@ -264,7 +275,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDateMillis
+            initialSelectedDateMillis = toDatePickerUtcMillis(selectedDateMillis)
         )
 
         DatePickerDialog(
@@ -272,8 +283,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        selectedDateMillis = normalizeDay(
-                            datePickerState.selectedDateMillis ?: selectedDateMillis
+                        selectedDateMillis = fromDatePickerUtcMillis(
+                            datePickerState.selectedDateMillis ?: toDatePickerUtcMillis(selectedDateMillis)
                         )
                         showDatePicker = false
                     }
@@ -297,7 +308,8 @@ private fun HeaderCard(
     totalAmount: Int,
     recordCount: Int,
     topEmotion: String,
-    biggestAmount: Int
+    biggestAmount: Int,
+    onReportClick: () -> Unit
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -347,6 +359,12 @@ private fun HeaderCard(
                     value = formatWon(biggestAmount),
                     modifier = Modifier.weight(1f)
                 )
+            }
+            Button(
+                onClick = onReportClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("상세 통계 보기")
             }
         }
     }
@@ -721,5 +739,35 @@ private fun normalizeDay(millis: Long): Long {
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun toDatePickerUtcMillis(localDayMillis: Long): Long {
+    val local = Calendar.getInstance().apply { timeInMillis = localDayMillis }
+    return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(
+            local.get(Calendar.YEAR),
+            local.get(Calendar.MONTH),
+            local.get(Calendar.DAY_OF_MONTH),
+            0,
+            0,
+            0
+        )
+    }.timeInMillis
+}
+
+private fun fromDatePickerUtcMillis(utcMillis: Long): Long {
+    val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    return Calendar.getInstance().apply {
+        clear()
+        set(
+            utc.get(Calendar.YEAR),
+            utc.get(Calendar.MONTH),
+            utc.get(Calendar.DAY_OF_MONTH),
+            0,
+            0,
+            0
+        )
     }.timeInMillis
 }
