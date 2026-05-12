@@ -30,6 +30,7 @@ fun ExpenseItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // 목록에 보이는 지출 기록 1개를 카드 형태로 표시한다.
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -50,6 +51,7 @@ fun ExpenseItem(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    // 왼쪽에는 분류와 날짜/감정을 보여줘 기록을 빠르게 구분할 수 있게 한다.
                     Text(
                         text = expense.category,
                         style = MaterialTheme.typography.titleSmall,
@@ -62,6 +64,7 @@ fun ExpenseItem(
                         color = Color(0xFF5D6B82)
                     )
                 }
+                // 오른쪽 금액은 목록에서 가장 중요한 값이라 굵게 표시한다.
                 Text(
                     text = formatAmount(expense.amount),
                     style = MaterialTheme.typography.titleMedium,
@@ -70,6 +73,7 @@ fun ExpenseItem(
                 )
             }
 
+            // 카테고리와 감정은 통계의 기준이 되는 값이라 배지로 한 번 더 노출한다.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
