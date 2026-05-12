@@ -13,8 +13,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
+            // 앱 전체에서 공유할 지출 ViewModel을 Compose 생명주기에 맞춰 생성한다.
             val expenseViewModel: ExpenseViewModel = viewModel()
 
+            // 실제 화면 전환과 메인 UI 구성은 Root Composable이 담당한다.
             EmotionBudgetAppRoot(viewModel = expenseViewModel)
         }
     }
