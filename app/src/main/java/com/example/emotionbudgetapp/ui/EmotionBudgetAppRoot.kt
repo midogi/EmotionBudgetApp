@@ -3,7 +3,8 @@ package com.example.emotionbudgetapp.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -32,14 +33,17 @@ fun EmotionBudgetAppRoot(viewModel: ExpenseViewModel) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         ExpenseScreen(viewModel = viewModel)
-        ExtendedFloatingActionButton(
-            text = { Text("감정 분석") },
+        Button(
             onClick = { showEmotionAnalysis = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp),
-            containerColor = Color(0xFFFF6651),
-            contentColor = Color.White
-        )
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF6651),
+                contentColor = Color.White
+            )
+        ) {
+            Text("감정 분석")
+        }
     }
 }
