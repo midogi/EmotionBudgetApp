@@ -34,6 +34,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+// 감정 분석 화면에서 한 감정에 대해 보여줄 계산 결과를 한곳에 모은 모델.
 private data class EmotionStat(
     val emotion: String,
     val totalAmount: Int,
@@ -49,12 +50,15 @@ fun EmotionAnalysisScreen(
     expenses: List<Expense>,
     onBack: () -> Unit
 ) {
+    // 분석 기준 월. 이전/다음 버튼을 누르면 이 값이 바뀌고 통계가 다시 계산된다.
     var visibleMonthMillis by remember { mutableStateOf(startOfMonth(System.currentTimeMillis())) }
 
+    // 현재 월과 지난달의 범위를 millis로 계산한다.
     val monthStart = startOfMonth(visibleMonthMillis)
     val monthEnd = addMonths(monthStart, 1)
     val previousMonthStart = addMonths(monthStart, -1)
 
+    // 이번 달 기록과 지난달 기록을 나눠야 "지난달보다 몇 회 증가" 같은 문장을 만들 수 있다.
     val monthExpenses = expenses.filter { it.dateMillis >= monthStart && it.dateMillis < monthEnd }
     val previousMonthExpenses = expenses.filter { it.dateMillis >= previousMonthStart && it.dateMillis < monthStart }
     val emotionStats = buildEmotionStats(monthExpenses, previousMonthExpenses)
@@ -367,6 +371,7 @@ private fun EmotionShareBar(share: Float) {
         ) {}
         Surface(
             modifier = Modifier
+                // share는 이번 달 총지출 중 해당 감정이 차지한 비율이다.
                 .fillMaxWidth(share.coerceIn(0.04f, 1f))
                 .height(8.dp),
             color = Color(0xFFFF6651),
@@ -397,9 +402,12 @@ private fun buildEmotionStats(
     monthExpenses: List<Expense>,
     previousMonthExpenses: List<Expense>
 ): List<EmotionStat> {
+    // 기본 감정은 기록이 없어도 순서 기준으로 유지하고, 새 감정이 생기면 뒤에 자연스럽게 포함한다.
     val defaultEmotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
     val allEmotions = (defaultEmotions + monthExpenses.map { it.emotion } + previousMonthExpenses.map { it.emotion })
         .distinct()
+
+    // 총지출이 0원일 때도 share 계산에서 0으로 나누지 않도록 1을 임시 기준값으로 사용한다.
     val totalAmount = monthExpenses.sumOf { it.amount }.takeIf { it > 0 } ?: 1
 
     return allEmotions.map { emotion ->
@@ -417,6 +425,7 @@ private fun buildEmotionStats(
             share = currentTotal.toFloat() / totalAmount.toFloat()
         )
     }.sortedWith(
+        // 화면에서는 돈을 많이 쓴 감정부터 보이게 정렬한다.
         compareByDescending<EmotionStat> { it.totalAmount }
             .thenByDescending { it.count }
             .thenBy { defaultEmotions.indexOf(it.emotion).let { index -> if (index == -1) Int.MAX_VALUE else index } }
@@ -424,6 +433,7 @@ private fun buildEmotionStats(
 }
 
 private fun buildStressInsight(stressStat: EmotionStat?): String {
+    // 스트레스 소비는 앱의 핵심 인사이트라 별도 문장으로 뽑아 상단에 보여준다.
     if (stressStat == null || stressStat.count == 0 && stressStat.previousCount == 0) {
         return "스트레스 소비 기록이 생기면 지난달과 비교해서 변화를 알려줄게요."
     }
