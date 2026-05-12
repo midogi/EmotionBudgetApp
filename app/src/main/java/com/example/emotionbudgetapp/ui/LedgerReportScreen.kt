@@ -33,6 +33,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+// 상세 통계 화면의 상단 탭 종류.
+// 각 탭은 같은 월 데이터(monthExpenses)를 다른 방식으로 보여준다.
 private enum class ReportTab(val label: String) {
     Daily("일일"),
     Calendar("달력"),
@@ -41,12 +43,14 @@ private enum class ReportTab(val label: String) {
     Summary("요약")
 }
 
+// 하루 단위로 묶은 지출 목록과 그날의 합계를 함께 들고 다니는 화면용 모델.
 private data class DailyExpenseGroup(
     val dayMillis: Long,
     val expenses: List<Expense>,
     val totalAmount: Int
 )
 
+// 달력 칸 하나를 표현한다. 빈 칸은 dayNumber가 null이다.
 private data class CalendarDayCell(
     val dayNumber: Int?,
     val dayMillis: Long?,
@@ -58,9 +62,11 @@ fun LedgerReportScreen(
     expenses: List<Expense>,
     onBack: () -> Unit
 ) {
+    // 현재 보고 있는 달. 이전/다음 버튼을 누르면 이 값이 바뀌고 화면 전체 통계가 다시 계산된다.
     var visibleMonthMillis by remember { mutableStateOf(startOfMonth(System.currentTimeMillis())) }
     var selectedTab by remember { mutableStateOf(ReportTab.Daily) }
 
+    // 월 시작~다음 달 시작 사이의 기록만 골라서 이번 화면의 기준 데이터로 사용한다.
     val monthStart = startOfMonth(visibleMonthMillis)
     val monthEnd = addMonths(monthStart, 1)
     val monthExpenses = expenses
@@ -95,6 +101,7 @@ fun LedgerReportScreen(
                 )
             }
 
+            // 선택된 탭에 따라 같은 월 데이터를 다른 Composable로 전달한다.
             when (selectedTab) {
                 ReportTab.Daily -> {
                     val groups = buildDailyGroups(monthExpenses)
@@ -401,6 +408,7 @@ private fun CalendarMonthView(
     monthMillis: Long,
     expenses: List<Expense>
 ) {
+    // 달력 화면은 먼저 한 달의 모든 칸을 만들고, 7개씩 잘라 한 주로 표현한다.
     val weeks = buildCalendarCells(monthMillis, expenses).chunked(7)
 
     Column(
@@ -466,6 +474,7 @@ private fun CalendarDayCellView(
 
 @Composable
 private fun WeeklyReportView(monthMillis: Long, expenses: List<Expense>) {
+    // Calendar.WEEK_OF_MONTH 값으로 묶어 같은 달의 몇 주차 소비인지 계산한다.
     val weekGroups = expenses
         .groupBy { weekOfMonth(it.dateMillis) }
         .toSortedMap()
@@ -491,6 +500,7 @@ private fun WeeklyReportView(monthMillis: Long, expenses: List<Expense>) {
 
 @Composable
 private fun MonthlyReportView(expenses: List<Expense>) {
+    // 같은 월 데이터 안에서 카테고리별/감정별 합계를 따로 계산한다.
     val categoryTotals = expenses
         .groupBy { it.category }
         .map { it.key to it.value.sumOf { expense -> expense.amount } }
@@ -511,6 +521,7 @@ private fun MonthlyReportView(expenses: List<Expense>) {
 
 @Composable
 private fun SummaryReportView(monthMillis: Long, expenses: List<Expense>) {
+    // 기록이 있는 날짜 수를 기준으로 하루 평균 지출을 계산한다.
     val spendDays = expenses.map { startOfDay(it.dateMillis) }.distinct().size
     val total = expenses.sumOf { it.amount }
     val avg = if (spendDays == 0) 0 else total / spendDays
@@ -655,6 +666,7 @@ private fun ReportEmptyState(message: String) {
 }
 
 private fun buildDailyGroups(expenses: List<Expense>): List<DailyExpenseGroup> {
+    // dateMillis를 하루 시작값으로 정규화한 뒤 같은 날짜끼리 묶는다.
     return expenses
         .groupBy { startOfDay(it.dateMillis) }
         .map { (dayMillis, dayExpenses) ->
@@ -676,6 +688,8 @@ private fun buildCalendarCells(monthMillis: Long, expenses: List<Expense>): List
         .mapValues { entry -> entry.value.sumOf { it.amount } }
 
     val cells = mutableListOf<CalendarDayCell>()
+
+    // 월의 1일이 시작되기 전 요일 칸은 빈 셀로 채운다.
     repeat(firstDayOfWeek - 1) {
         cells.add(CalendarDayCell(dayNumber = null, dayMillis = null, totalAmount = 0))
     }
@@ -698,6 +712,7 @@ private fun buildCalendarCells(monthMillis: Long, expenses: List<Expense>): List
         )
     }
 
+    // 마지막 주가 7칸이 되도록 빈 셀을 추가한다.
     while (cells.size % 7 != 0) {
         cells.add(CalendarDayCell(dayNumber = null, dayMillis = null, totalAmount = 0))
     }
