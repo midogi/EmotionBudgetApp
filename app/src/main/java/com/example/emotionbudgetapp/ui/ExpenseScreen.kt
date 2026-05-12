@@ -1,55 +1,70 @@
 package com.example.emotionbudgetapp.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.emotionbudgetapp.data.Expense
 import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseScreen(viewModel: ExpenseViewModel) {
-    // ViewModel의 지출 목록을 화면 상태로 관찰한다.
     val expenses by viewModel.expenses.collectAsState()
 
-    // 사용자가 입력 중인 값들을 저장하는 화면 상태
     var amountText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("식비") }
     var emotion by remember { mutableStateOf("기쁨") }
     var memo by remember { mutableStateOf("") }
+    var selectedDateMillis by remember { mutableStateOf(todayMillis()) }
+    var editingExpenseId by remember { mutableStateOf<Int?>(null) }
+
+    var searchText by remember { mutableStateOf("") }
+    var categoryFilter by remember { mutableStateOf("전체") }
+    var emotionFilter by remember { mutableStateOf("전체") }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var pendingDeleteExpense by remember { mutableStateOf<Expense?>(null) }
 
     val categories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
     val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
@@ -60,6 +75,36 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         .maxByOrNull { it.value }
         ?.key ?: "기록 없음"
     val biggestAmount = expenses.maxOfOrNull { it.amount } ?: 0
+    val categoryTotals = expenses
+        .groupBy { it.category }
+        .map { entry -> entry.key to entry.value.sumOf { it.amount } }
+        .sortedByDescending { it.second }
+
+    val filteredExpenses = expenses
+        .filter { expense ->
+            val query = searchText.trim()
+            val matchesQuery = query.isBlank() ||
+                expense.category.contains(query, ignoreCase = true) ||
+                expense.emotion.contains(query, ignoreCase = true) ||
+                expense.memo.contains(query, ignoreCase = true) ||
+                expense.amount.toString().contains(query) ||
+                formatDate(expense.dateMillis).contains(query)
+
+            val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
+            val matchesEmotion = emotionFilter == "전체" || expense.emotion == emotionFilter
+
+            matchesQuery && matchesCategory && matchesEmotion
+        }
+        .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
+
+    fun resetForm() {
+        amountText = ""
+        category = categories.first()
+        emotion = emotions.first()
+        memo = ""
+        selectedDateMillis = todayMillis()
+        editingExpenseId = null
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -79,6 +124,12 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                 )
             }
 
+            if (categoryTotals.isNotEmpty()) {
+                item {
+                    CategoryTotalsCard(categoryTotals = categoryTotals)
+                }
+            }
+
             item {
                 ExpenseInputCard(
                     amountText = amountText,
@@ -91,36 +142,152 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     onEmotionChange = { emotion = it },
                     memo = memo,
                     onMemoChange = { memo = it },
-                    onAddClick = {
+                    selectedDateText = formatDate(selectedDateMillis),
+                    onDateClick = { showDatePicker = true },
+                    isEditing = editingExpenseId != null,
+                    isSubmitEnabled = amountText.toIntOrNull()?.let { it > 0 } == true,
+                    onCancelEdit = ::resetForm,
+                    onSubmit = {
                         val amount = amountText.toIntOrNull()
 
                         if (amount != null && amount > 0) {
-                            viewModel.addExpense(amount, category, emotion, memo)
-                            amountText = ""
-                            memo = ""
+                            val editingId = editingExpenseId
+                            if (editingId == null) {
+                                viewModel.addExpense(
+                                    amount = amount,
+                                    category = category,
+                                    emotion = emotion,
+                                    memo = memo,
+                                    dateMillis = selectedDateMillis
+                                )
+                            } else {
+                                viewModel.updateExpense(
+                                    id = editingId,
+                                    amount = amount,
+                                    category = category,
+                                    emotion = emotion,
+                                    memo = memo,
+                                    dateMillis = selectedDateMillis
+                                )
+                            }
+                            resetForm()
                         }
                     }
                 )
             }
 
             item {
-                SectionTitle(recordCount = expenses.size)
+                FilterCard(
+                    searchText = searchText,
+                    onSearchTextChange = { searchText = it },
+                    categoryFilter = categoryFilter,
+                    categoryOptions = listOf("전체") + categories,
+                    onCategoryFilterChange = { categoryFilter = it },
+                    emotionFilter = emotionFilter,
+                    emotionOptions = listOf("전체") + emotions,
+                    onEmotionFilterChange = { emotionFilter = it },
+                    onClearFilters = {
+                        searchText = ""
+                        categoryFilter = "전체"
+                        emotionFilter = "전체"
+                    }
+                )
             }
 
-            if (expenses.isEmpty()) {
+            item {
+                SectionTitle(
+                    recordCount = filteredExpenses.size,
+                    totalCount = expenses.size
+                )
+            }
+
+            if (filteredExpenses.isEmpty()) {
                 item {
-                    EmptyRecordCard()
+                    if (expenses.isEmpty()) {
+                        EmptyRecordCard(
+                            title = "아직 기록이 없어요",
+                            message = "금액과 감정을 입력하면 여기에 지출 기록이 쌓입니다."
+                        )
+                    } else {
+                        EmptyRecordCard(
+                            title = "조건에 맞는 기록이 없어요",
+                            message = "검색어나 필터를 바꾸면 다른 기록을 볼 수 있습니다."
+                        )
+                    }
                 }
             } else {
-                items(expenses, key = { it.id }) { expense ->
+                items(filteredExpenses, key = { it.id }) { expense ->
                     ExpenseItem(
                         expense = expense,
+                        onEdit = {
+                            amountText = expense.amount.toString()
+                            category = expense.category
+                            emotion = expense.emotion
+                            memo = expense.memo
+                            selectedDateMillis = expense.dateMillis
+                            editingExpenseId = expense.id
+                        },
                         onDelete = {
-                            viewModel.deleteExpense(expense)
+                            pendingDeleteExpense = expense
                         }
                     )
                 }
             }
+        }
+    }
+
+    pendingDeleteExpense?.let { expense ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteExpense = null },
+            title = { Text("기록 삭제") },
+            text = { Text("${formatWon(expense.amount)} 지출 기록을 삭제할까요?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteExpense(expense)
+                        if (editingExpenseId == expense.id) {
+                            resetForm()
+                        }
+                        pendingDeleteExpense = null
+                    }
+                ) {
+                    Text("삭제")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteExpense = null }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateMillis
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedDateMillis = normalizeDay(
+                            datePickerState.selectedDateMillis ?: selectedDateMillis
+                        )
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("선택")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("취소")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
@@ -216,6 +383,47 @@ private fun SummaryMetric(
 }
 
 @Composable
+private fun CategoryTotalsCard(categoryTotals: List<Pair<String, Int>>) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "카테고리별 합계",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172033)
+            )
+            categoryTotals.forEach { (name, total) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF263244)
+                    )
+                    Text(
+                        text = formatWon(total),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF0F766E)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ExpenseInputCard(
     amountText: String,
     onAmountChange: (String) -> Unit,
@@ -227,7 +435,12 @@ private fun ExpenseInputCard(
     onEmotionChange: (String) -> Unit,
     memo: String,
     onMemoChange: (String) -> Unit,
-    onAddClick: () -> Unit
+    selectedDateText: String,
+    onDateClick: () -> Unit,
+    isEditing: Boolean,
+    isSubmitEnabled: Boolean,
+    onCancelEdit: () -> Unit,
+    onSubmit: () -> Unit
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -242,7 +455,7 @@ private fun ExpenseInputCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "새 지출 기록",
+                text = if (isEditing) "지출 기록 수정" else "새 지출 기록",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF172033)
@@ -257,6 +470,13 @@ private fun ExpenseInputCard(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            OutlinedButton(
+                onClick = onDateClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("날짜: $selectedDateText")
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -286,19 +506,112 @@ private fun ExpenseInputCard(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Button(
-                onClick = onAddClick,
-                enabled = amountText.toIntOrNull()?.let { it > 0 } == true,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("기록 추가")
+            if (isEditing) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCancelEdit,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("취소")
+                    }
+                    Button(
+                        onClick = onSubmit,
+                        enabled = isSubmitEnabled,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("수정 저장")
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onSubmit,
+                    enabled = isSubmitEnabled,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("기록 추가")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SectionTitle(recordCount: Int) {
+private fun FilterCard(
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    categoryFilter: String,
+    categoryOptions: List<String>,
+    onCategoryFilterChange: (String) -> Unit,
+    emotionFilter: String,
+    emotionOptions: List<String>,
+    onEmotionFilterChange: (String) -> Unit,
+    onClearFilters: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "기록 찾기",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172033)
+            )
+
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = onSearchTextChange,
+                label = { Text("검색") },
+                placeholder = { Text("메모, 금액, 날짜, 감정 검색") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DropdownSelector(
+                    label = "카테고리",
+                    selectedValue = categoryFilter,
+                    options = categoryOptions,
+                    onSelected = onCategoryFilterChange,
+                    modifier = Modifier.weight(1f)
+                )
+                DropdownSelector(
+                    label = "감정",
+                    selectedValue = emotionFilter,
+                    options = emotionOptions,
+                    onSelected = onEmotionFilterChange,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (searchText.isNotBlank() || categoryFilter != "전체" || emotionFilter != "전체") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onClearFilters) {
+                        Text("필터 초기화")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(recordCount: Int, totalCount: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -310,7 +623,7 @@ private fun SectionTitle(recordCount: Int) {
             color = Color(0xFF172033)
         )
         Text(
-            text = "${recordCount}개",
+            text = if (recordCount == totalCount) "${recordCount}개" else "${recordCount}/${totalCount}개",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFF5D6B82)
         )
@@ -318,7 +631,7 @@ private fun SectionTitle(recordCount: Int) {
 }
 
 @Composable
-private fun EmptyRecordCard() {
+private fun EmptyRecordCard(title: String, message: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
@@ -329,13 +642,13 @@ private fun EmptyRecordCard() {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "아직 기록이 없어요",
+                text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF172033)
             )
             Text(
-                text = "금액과 감정을 입력하면 여기에 지출 기록이 쌓입니다.",
+                text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF5D6B82)
             )
@@ -391,4 +704,22 @@ fun DropdownSelector(
 
 private fun formatWon(amount: Int): String {
     return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
+}
+
+private fun formatDate(millis: Long): String {
+    return SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).format(Date(millis))
+}
+
+private fun todayMillis(): Long {
+    return normalizeDay(System.currentTimeMillis())
+}
+
+private fun normalizeDay(millis: Long): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
 }

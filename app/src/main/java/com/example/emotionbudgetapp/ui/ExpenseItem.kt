@@ -20,11 +20,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.emotionbudgetapp.data.Expense
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @Composable
 fun ExpenseItem(
     expense: Expense,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     ElevatedCard(
@@ -54,7 +57,7 @@ fun ExpenseItem(
                         color = Color(0xFF172033)
                     )
                     Text(
-                        text = "감정: ${expense.emotion}",
+                        text = "${formatDate(expense.dateMillis)} · 감정: ${expense.emotion}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF5D6B82)
                     )
@@ -86,6 +89,9 @@ fun ExpenseItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = onEdit) {
+                    Text("수정")
+                }
                 TextButton(onClick = onDelete) {
                     Text("삭제")
                 }
@@ -114,4 +120,8 @@ private fun InfoBadge(text: String) {
 
 private fun formatAmount(amount: Int): String {
     return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
+}
+
+private fun formatDate(millis: Long): String {
+    return SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).format(Date(millis))
 }
