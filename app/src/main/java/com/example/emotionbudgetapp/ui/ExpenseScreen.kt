@@ -52,7 +52,10 @@ import java.util.TimeZone
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseScreen(viewModel: ExpenseViewModel) {
+    // ViewModel의 StateFlow를 Compose State로 바꿔서 화면이 목록 변화를 자동으로 따라가게 한다.
     val expenses by viewModel.expenses.collectAsState()
+
+    // 메인 화면 안에서 상세 통계 화면으로 넘어갈지 결정하는 단순 화면 전환 상태.
     var showReport by remember { mutableStateOf(false) }
 
     if (showReport) {
@@ -63,6 +66,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         return
     }
 
+    // 입력 폼 상태. remember를 쓰면 화면이 다시 그려져도 사용자가 입력 중인 값이 유지된다.
     var amountText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("식비") }
     var emotion by remember { mutableStateOf("기쁨") }
@@ -70,14 +74,18 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     var selectedDateMillis by remember { mutableStateOf(todayMillis()) }
     var editingExpenseId by remember { mutableStateOf<Int?>(null) }
 
+    // 검색/필터/다이얼로그처럼 화면 동작을 제어하는 상태들.
     var searchText by remember { mutableStateOf("") }
     var categoryFilter by remember { mutableStateOf("전체") }
     var emotionFilter by remember { mutableStateOf("전체") }
     var showDatePicker by remember { mutableStateOf(false) }
     var pendingDeleteExpense by remember { mutableStateOf<Expense?>(null) }
 
+    // 입력 폼과 필터 드롭다운에서 같이 쓰는 기본 선택지.
     val categories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
     val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
+
+    // 상단 요약 카드와 카테고리 요약 카드에 쓰는 파생 데이터.
     val totalAmount = expenses.sumOf { it.amount }
     val topEmotion = expenses
         .groupingBy { it.emotion }
@@ -90,6 +98,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         .map { entry -> entry.key to entry.value.sumOf { it.amount } }
         .sortedByDescending { it.second }
 
+    // 검색어, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
     val filteredExpenses = expenses
         .filter { expense ->
             val query = searchText.trim()
@@ -107,6 +116,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         }
         .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
 
+    // 추가/수정이 끝난 뒤 입력 폼을 처음 상태로 되돌린다.
     fun resetForm() {
         amountText = ""
         category = categories.first()
@@ -164,6 +174,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                         if (amount != null && amount > 0) {
                             val editingId = editingExpenseId
                             if (editingId == null) {
+                                // 수정 중인 id가 없으면 새 지출 기록을 추가한다.
                                 viewModel.addExpense(
                                     amount = amount,
                                     category = category,
@@ -172,6 +183,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                                     dateMillis = selectedDateMillis
                                 )
                             } else {
+                                // 수정 중이면 같은 id의 기록만 새 입력값으로 교체한다.
                                 viewModel.updateExpense(
                                     id = editingId,
                                     amount = amount,
@@ -231,6 +243,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     ExpenseItem(
                         expense = expense,
                         onEdit = {
+                            // 선택한 기록의 값을 입력 폼에 다시 채워 수정 모드로 전환한다.
                             amountText = expense.amount.toString()
                             category = expense.category
                             emotion = expense.emotion
@@ -239,6 +252,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                             editingExpenseId = expense.id
                         },
                         onDelete = {
+                            // 바로 삭제하지 않고 확인 다이얼로그를 띄우기 위해 임시 상태에 담는다.
                             pendingDeleteExpense = expense
                         }
                     )
@@ -283,6 +297,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Material DatePicker는 UTC 기준 millis를 돌려주기 때문에 로컬 날짜로 다시 변환한다.
                         selectedDateMillis = fromDatePickerUtcMillis(
                             datePickerState.selectedDateMillis ?: toDatePickerUtcMillis(selectedDateMillis)
                         )
@@ -685,6 +700,7 @@ fun DropdownSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
+    // Material3의 ExposedDropdownMenuBox는 TextField처럼 보이지만 클릭하면 메뉴가 펼쳐지는 UI다.
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
@@ -733,6 +749,7 @@ private fun todayMillis(): Long {
 }
 
 private fun normalizeDay(millis: Long): Long {
+    // 시간/분/초를 0으로 맞춰 같은 날짜는 항상 같은 millis로 비교되게 한다.
     return Calendar.getInstance().apply {
         timeInMillis = millis
         set(Calendar.HOUR_OF_DAY, 0)
@@ -743,6 +760,7 @@ private fun normalizeDay(millis: Long): Long {
 }
 
 private fun toDatePickerUtcMillis(localDayMillis: Long): Long {
+    // DatePicker는 UTC 기준 날짜를 기대하므로 로컬 날짜의 연/월/일만 UTC 달력에 옮긴다.
     val local = Calendar.getInstance().apply { timeInMillis = localDayMillis }
     return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
         clear()
@@ -758,6 +776,7 @@ private fun toDatePickerUtcMillis(localDayMillis: Long): Long {
 }
 
 private fun fromDatePickerUtcMillis(utcMillis: Long): Long {
+    // DatePicker가 돌려준 UTC 날짜의 연/월/일을 다시 로컬 시간대의 하루 시작으로 변환한다.
     val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
     return Calendar.getInstance().apply {
         clear()
