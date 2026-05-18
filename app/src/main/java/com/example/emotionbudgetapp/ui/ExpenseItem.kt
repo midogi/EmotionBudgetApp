@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.emotionbudgetapp.data.Expense
+import com.example.emotionbudgetapp.data.TransactionType
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -30,7 +31,11 @@ fun ExpenseItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    // 목록에 보이는 지출 기록 1개를 카드 형태로 표시한다.
+    val isIncome = expense.type == TransactionType.INCOME
+    val amountColor = if (isIncome) Color(0xFF3B82F6) else Color(0xFFFF6651)
+    val typeLabel = expense.type.label
+
+    // 목록에 보이는 수입/지출 기록 1개를 카드 형태로 표시한다.
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -51,34 +56,41 @@ fun ExpenseItem(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // 왼쪽에는 분류와 날짜/감정을 보여줘 기록을 빠르게 구분할 수 있게 한다.
+                    // 왼쪽에는 타입/분류와 날짜/감정을 보여줘 기록을 빠르게 구분할 수 있게 한다.
                     Text(
-                        text = expense.category,
+                        text = "$typeLabel · ${expense.category}",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF172033)
                     )
                     Text(
-                        text = "${formatDate(expense.dateMillis)} · 감정: ${expense.emotion}",
+                        text = if (isIncome) {
+                            "${formatDate(expense.dateMillis)} · 수입 기록"
+                        } else {
+                            "${formatDate(expense.dateMillis)} · 감정: ${expense.emotion}"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF5D6B82)
                     )
                 }
-                // 오른쪽 금액은 목록에서 가장 중요한 값이라 굵게 표시한다.
+                // 수입은 +, 지출은 -로 보여줘 목록에서 흐름이 바로 읽히게 한다.
                 Text(
-                    text = formatAmount(expense.amount),
+                    text = formatSignedAmount(expense.amount, expense.type),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F766E)
+                    color = amountColor
                 )
             }
 
-            // 카테고리와 감정은 통계의 기준이 되는 값이라 배지로 한 번 더 노출한다.
+            // 수입/지출 타입, 카테고리, 감정은 통계의 기준이 되는 값이라 배지로 한 번 더 노출한다.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                InfoBadge(text = typeLabel, color = if (isIncome) Color(0xFFEAF2FF) else Color(0xFFFFEDE9))
                 InfoBadge(text = expense.category)
-                InfoBadge(text = expense.emotion)
+                if (!isIncome) {
+                    InfoBadge(text = expense.emotion)
+                }
             }
 
             if (expense.memo.isNotBlank()) {
@@ -105,9 +117,9 @@ fun ExpenseItem(
 }
 
 @Composable
-private fun InfoBadge(text: String) {
+private fun InfoBadge(text: String, color: Color = Color(0xFFE8F0F2)) {
     Surface(
-        color = Color(0xFFE8F0F2),
+        color = color,
         shape = RoundedCornerShape(8.dp)
     ) {
         Row(
@@ -122,8 +134,9 @@ private fun InfoBadge(text: String) {
     }
 }
 
-private fun formatAmount(amount: Int): String {
-    return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
+private fun formatSignedAmount(amount: Int, type: TransactionType): String {
+    val prefix = if (type == TransactionType.INCOME) "+" else "-"
+    return prefix + NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
 }
 
 private fun formatDate(millis: Long): String {
