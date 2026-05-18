@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.emotionbudgetapp.data.Expense
+import com.example.emotionbudgetapp.data.TransactionType
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -53,14 +54,17 @@ fun EmotionAnalysisScreen(
     // 분석 기준 월. 이전/다음 버튼을 누르면 이 값이 바뀌고 통계가 다시 계산된다.
     var visibleMonthMillis by remember { mutableStateOf(startOfMonth(System.currentTimeMillis())) }
 
+    // 수입 기록은 감정 소비 분석에서 제외한다. 감정 분석은 지출 습관을 설명하는 화면이기 때문이다.
+    val expenseOnlyRecords = expenses.filter { it.type == TransactionType.EXPENSE }
+
     // 현재 월과 지난달의 범위를 millis로 계산한다.
     val monthStart = startOfMonth(visibleMonthMillis)
     val monthEnd = addMonths(monthStart, 1)
     val previousMonthStart = addMonths(monthStart, -1)
 
-    // 이번 달 기록과 지난달 기록을 나눠야 "지난달보다 몇 회 증가" 같은 문장을 만들 수 있다.
-    val monthExpenses = expenses.filter { it.dateMillis >= monthStart && it.dateMillis < monthEnd }
-    val previousMonthExpenses = expenses.filter { it.dateMillis >= previousMonthStart && it.dateMillis < monthStart }
+    // 이번 달 지출과 지난달 지출을 나눠야 "지난달보다 몇 회 증가" 같은 문장을 만들 수 있다.
+    val monthExpenses = expenseOnlyRecords.filter { it.dateMillis >= monthStart && it.dateMillis < monthEnd }
+    val previousMonthExpenses = expenseOnlyRecords.filter { it.dateMillis >= previousMonthStart && it.dateMillis < monthStart }
     val emotionStats = buildEmotionStats(monthExpenses, previousMonthExpenses)
     val monthTotal = monthExpenses.sumOf { it.amount }
     val topSpendingEmotion = emotionStats.maxByOrNull { it.totalAmount }
@@ -105,7 +109,7 @@ fun EmotionAnalysisScreen(
                 EmotionInsightCard(
                     title = "가장 자주 나온 감정",
                     message = topCountEmotion?.let { "${it.emotion} 감정으로 ${it.count}회 소비했어요." }
-                        ?: "이번 달 감정 기록이 아직 없어요."
+                        ?: "이번 달 감정 지출 기록이 아직 없어요."
                 )
             }
 
@@ -204,7 +208,7 @@ private fun EmotionHeroCard(
                 color = Color(0xFF172033)
             )
             Text(
-                text = "감정별 소비 규모와 빈도를 한 달 단위로 비교해요.",
+                text = "감정별 지출 규모와 빈도를 한 달 단위로 비교해요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF667085)
             )
@@ -229,7 +233,7 @@ private fun EmotionHeroCard(
                     modifier = Modifier.weight(1f)
                 )
                 EmotionMetricBox(
-                    label = "기록",
+                    label = "지출 기록",
                     value = "${recordCount}개",
                     modifier = Modifier.weight(1f)
                 )
@@ -391,7 +395,7 @@ private fun EmotionEmptyState() {
     ) {
         Text(
             modifier = Modifier.padding(18.dp),
-            text = "이번 달 기록이 생기면 감정별 총액, 횟수, 평균 지출을 자동으로 분석해요.",
+            text = "이번 달 지출 기록이 생기면 감정별 총액, 횟수, 평균 지출을 자동으로 분석해요.",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFF64748B)
         )
@@ -434,8 +438,8 @@ private fun buildEmotionStats(
 
 private fun buildStressInsight(stressStat: EmotionStat?): String {
     // 스트레스 소비는 앱의 핵심 인사이트라 별도 문장으로 뽑아 상단에 보여준다.
-    if (stressStat == null || stressStat.count == 0 && stressStat.previousCount == 0) {
-        return "스트레스 소비 기록이 생기면 지난달과 비교해서 변화를 알려줄게요."
+    if (stressStat == null || (stressStat.count == 0 && stressStat.previousCount == 0)) {
+        return "스트레스 지출 기록이 생기면 지난달과 비교해서 변화를 알려줄게요."
     }
 
     return when {
