@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.emotionbudgetapp.data.Expense
+import com.example.emotionbudgetapp.data.TransactionType
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -34,7 +33,7 @@ import java.util.Date
 import java.util.Locale
 
 // 상세 통계 화면의 상단 탭 종류.
-// 각 탭은 같은 월 데이터(monthExpenses)를 다른 방식으로 보여준다.
+// 같은 월 기록을 일일, 달력, 주별, 월별, 요약 관점으로 바꿔 보여준다.
 private enum class ReportTab(val label: String) {
     Daily("일일"),
     Calendar("달력"),
@@ -43,18 +42,19 @@ private enum class ReportTab(val label: String) {
     Summary("요약")
 }
 
-// 하루 단위로 묶은 지출 목록과 그날의 합계를 함께 들고 다니는 화면용 모델.
-private data class DailyExpenseGroup(
+// 하루 단위로 묶은 수입/지출 목록과 그날의 타입별 합계를 함께 들고 다니는 화면용 모델.
+private data class DailyRecordGroup(
     val dayMillis: Long,
-    val expenses: List<Expense>,
-    val totalAmount: Int
+    val records: List<Expense>,
+    val incomeTotal: Int,
+    val expenseTotal: Int
 )
 
 // 달력 칸 하나를 표현한다. 빈 칸은 dayNumber가 null이다.
 private data class CalendarDayCell(
     val dayNumber: Int?,
-    val dayMillis: Long?,
-    val totalAmount: Int
+    val incomeTotal: Int,
+    val expenseTotal: Int
 )
 
 @Composable
@@ -69,10 +69,15 @@ fun LedgerReportScreen(
     // 월 시작~다음 달 시작 사이의 기록만 골라서 이번 화면의 기준 데이터로 사용한다.
     val monthStart = startOfMonth(visibleMonthMillis)
     val monthEnd = addMonths(monthStart, 1)
-    val monthExpenses = expenses
+    val monthRecords = expenses
         .filter { it.dateMillis >= monthStart && it.dateMillis < monthEnd }
         .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
-    val monthExpenseTotal = monthExpenses.sumOf { it.amount }
+    val monthIncomeTotal = monthRecords
+        .filter { it.type == TransactionType.INCOME }
+        .sumOf { it.amount }
+    val monthExpenseTotal = monthRecords
+        .filter { it.type == TransactionType.EXPENSE }
+        .sumOf { it.amount }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -86,7 +91,7 @@ fun LedgerReportScreen(
             item {
                 ReportHeader(
                     monthMillis = monthStart,
-                    incomeTotal = 0,
+                    incomeTotal = monthIncomeTotal,
                     expenseTotal = monthExpenseTotal,
                     onBack = onBack,
                     onPreviousMonth = { visibleMonthMillis = addMonths(monthStart, -1) },
@@ -104,10 +109,10 @@ fun LedgerReportScreen(
             // 선택된 탭에 따라 같은 월 데이터를 다른 Composable로 전달한다.
             when (selectedTab) {
                 ReportTab.Daily -> {
-                    val groups = buildDailyGroups(monthExpenses)
+                    val groups = buildDailyGroups(monthRecords)
                     if (groups.isEmpty()) {
                         item {
-                            ReportEmptyState(message = "이번 달에 등록된 지출 기록이 없어요.")
+                            ReportEmptyState(message = "이번 달에 등록된 수입/지출 기록이 없어요.")
                         }
                     } else {
                         items(groups, key = { it.dayMillis }) { group ->
@@ -120,20 +125,20 @@ fun LedgerReportScreen(
                     item {
                         CalendarMonthView(
                             monthMillis = monthStart,
-                            expenses = monthExpenses
+                            records = monthRecords
                         )
                     }
                 }
 
                 ReportTab.Weekly -> {
                     item {
-                        WeeklyReportView(monthMillis = monthStart, expenses = monthExpenses)
+                        WeeklyReportView(monthMillis = monthStart, records = monthRecords)
                     }
                 }
 
                 ReportTab.Monthly -> {
                     item {
-                        MonthlyReportView(expenses = monthExpenses)
+                        MonthlyReportView(records = monthRecords)
                     }
                 }
 
@@ -141,7 +146,7 @@ fun LedgerReportScreen(
                     item {
                         SummaryReportView(
                             monthMillis = monthStart,
-                            expenses = monthExpenses
+                            records = monthRecords
                         )
                     }
                 }
@@ -222,9 +227,9 @@ private fun ReportHeader(
                 modifier = Modifier.weight(1f)
             )
             ReportAmountMetric(
-                label = "합계",
+                label = "잔액",
                 value = formatSignedWon(incomeTotal - expenseTotal),
-                color = Color(0xFF1F2933),
+                color = balanceColor(incomeTotal - expenseTotal),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -291,7 +296,7 @@ private fun ReportTabs(
 }
 
 @Composable
-private fun DailyGroupCard(group: DailyExpenseGroup) {
+private fun DailyGroupCard(group: DailyRecordGroup) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -334,15 +339,15 @@ private fun DailyGroupCard(group: DailyExpenseGroup) {
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "0원",
+                    text = formatWon(group.incomeTotal),
                     color = Color(0xFF3B82F6),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = formatWon(group.totalAmount),
+                    text = formatWon(group.expenseTotal),
                     color = Color(0xFFFF6651),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
@@ -350,14 +355,14 @@ private fun DailyGroupCard(group: DailyExpenseGroup) {
             }
         }
 
-        group.expenses.forEach { expense ->
-            DailyExpenseRow(expense = expense)
+        group.records.forEach { record ->
+            DailyRecordRow(record = record)
         }
     }
 }
 
 @Composable
-private fun DailyExpenseRow(expense: Expense) {
+private fun DailyRecordRow(record: Expense) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -368,14 +373,14 @@ private fun DailyExpenseRow(expense: Expense) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = expense.category,
+                text = record.type.label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFA1A8B3)
+                color = recordAmountColor(record)
             )
             Text(
-                text = expense.emotion,
+                text = record.category,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFB4BBC5)
+                color = Color(0xFFA1A8B3)
             )
         }
         Column(
@@ -383,22 +388,22 @@ private fun DailyExpenseRow(expense: Expense) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = expense.memo.ifBlank { expense.category },
+                text = record.memo.ifBlank { record.category },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFF404854)
             )
             Text(
-                text = expense.emotion,
+                text = if (record.type == TransactionType.EXPENSE) record.emotion else "수입 기록",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFB4BBC5)
             )
         }
         Text(
-            text = formatWon(expense.amount),
+            text = formatRecordAmount(record),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF6651)
+            color = recordAmountColor(record)
         )
     }
 }
@@ -406,10 +411,10 @@ private fun DailyExpenseRow(expense: Expense) {
 @Composable
 private fun CalendarMonthView(
     monthMillis: Long,
-    expenses: List<Expense>
+    records: List<Expense>
 ) {
     // 달력 화면은 먼저 한 달의 모든 칸을 만들고, 7개씩 잘라 한 주로 표현한다.
-    val weeks = buildCalendarCells(monthMillis, expenses).chunked(7)
+    val weeks = buildCalendarCells(monthMillis, records).chunked(7)
 
     Column(
         modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
@@ -455,7 +460,7 @@ private fun CalendarDayCellView(
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = cell.dayNumber?.toString().orEmpty(),
@@ -464,7 +469,12 @@ private fun CalendarDayCellView(
                 color = Color(0xFF1F2933)
             )
             Text(
-                text = if (cell.totalAmount > 0) formatCompactWon(cell.totalAmount) else "",
+                text = if (cell.incomeTotal > 0) formatCompactWon(cell.incomeTotal) else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF3B82F6)
+            )
+            Text(
+                text = if (cell.expenseTotal > 0) formatCompactWon(cell.expenseTotal) else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFFFF6651)
             )
@@ -473,9 +483,9 @@ private fun CalendarDayCellView(
 }
 
 @Composable
-private fun WeeklyReportView(monthMillis: Long, expenses: List<Expense>) {
-    // Calendar.WEEK_OF_MONTH 값으로 묶어 같은 달의 몇 주차 소비인지 계산한다.
-    val weekGroups = expenses
+private fun WeeklyReportView(monthMillis: Long, records: List<Expense>) {
+    // Calendar.WEEK_OF_MONTH 값으로 묶어 같은 달의 몇 주차 기록인지 계산한다.
+    val weekGroups = records
         .groupBy { weekOfMonth(it.dateMillis) }
         .toSortedMap()
 
@@ -486,12 +496,16 @@ private fun WeeklyReportView(monthMillis: Long, expenses: List<Expense>) {
         if (weekGroups.isEmpty()) {
             ReportEmptyState(message = "이번 달 주별 통계가 아직 없어요.")
         } else {
-            weekGroups.forEach { (week, weekExpenses) ->
+            weekGroups.forEach { (week, weekRecords) ->
+                val incomeTotal = weekRecords.sumByType(TransactionType.INCOME)
+                val expenseTotal = weekRecords.sumByType(TransactionType.EXPENSE)
+                val balance = incomeTotal - expenseTotal
                 ReportSummaryRow(
                     title = "${week}주차",
-                    subtitle = weekRangeLabel(monthMillis, week),
-                    amount = weekExpenses.sumOf { it.amount },
-                    accent = Color(0xFFFF6651)
+                    subtitle = "${weekRangeLabel(monthMillis, week)} · 수입 ${formatWon(incomeTotal)} · 지출 ${formatWon(expenseTotal)}",
+                    amount = balance,
+                    accent = balanceColor(balance),
+                    signed = true
                 )
             }
         }
@@ -499,63 +513,94 @@ private fun WeeklyReportView(monthMillis: Long, expenses: List<Expense>) {
 }
 
 @Composable
-private fun MonthlyReportView(expenses: List<Expense>) {
-    // 같은 월 데이터 안에서 카테고리별/감정별 합계를 따로 계산한다.
-    val categoryTotals = expenses
-        .groupBy { it.category }
-        .map { it.key to it.value.sumOf { expense -> expense.amount } }
-        .sortedByDescending { it.second }
-    val emotionTotals = expenses
+private fun MonthlyReportView(records: List<Expense>) {
+    val incomeCategoryTotals = records
+        .filter { it.type == TransactionType.INCOME }
+        .categoryTotals()
+    val expenseCategoryTotals = records
+        .filter { it.type == TransactionType.EXPENSE }
+        .categoryTotals()
+    val emotionTotals = records
+        .filter { it.type == TransactionType.EXPENSE }
         .groupBy { it.emotion }
-        .map { it.key to it.value.sumOf { expense -> expense.amount } }
+        .map { it.key to it.value.sumOf { record -> record.amount } }
         .sortedByDescending { it.second }
 
     Column(
         modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        ReportBreakdownCard(title = "카테고리별 지출", rows = categoryTotals)
-        ReportBreakdownCard(title = "감정별 지출", rows = emotionTotals)
+        ReportBreakdownCard(
+            title = "수입 카테고리별 합계",
+            rows = incomeCategoryTotals,
+            accent = Color(0xFF3B82F6)
+        )
+        ReportBreakdownCard(
+            title = "지출 카테고리별 합계",
+            rows = expenseCategoryTotals,
+            accent = Color(0xFFFF6651)
+        )
+        ReportBreakdownCard(
+            title = "감정별 지출",
+            rows = emotionTotals,
+            accent = Color(0xFFFF6651)
+        )
     }
 }
 
 @Composable
-private fun SummaryReportView(monthMillis: Long, expenses: List<Expense>) {
-    // 기록이 있는 날짜 수를 기준으로 하루 평균 지출을 계산한다.
-    val spendDays = expenses.map { startOfDay(it.dateMillis) }.distinct().size
-    val total = expenses.sumOf { it.amount }
-    val avg = if (spendDays == 0) 0 else total / spendDays
-    val topCategory = expenses.groupingBy { it.category }.eachCount().maxByOrNull { it.value }?.key ?: "없음"
-    val topEmotion = expenses.groupingBy { it.emotion }.eachCount().maxByOrNull { it.value }?.key ?: "없음"
-    val highest = expenses.maxByOrNull { it.amount }
+private fun SummaryReportView(monthMillis: Long, records: List<Expense>) {
+    val incomeRecords = records.filter { it.type == TransactionType.INCOME }
+    val expenseRecords = records.filter { it.type == TransactionType.EXPENSE }
+    val recordDays = records.map { startOfDay(it.dateMillis) }.distinct().size
+    val incomeTotal = incomeRecords.sumOf { it.amount }
+    val expenseTotal = expenseRecords.sumOf { it.amount }
+    val balance = incomeTotal - expenseTotal
+    val averageExpense = if (recordDays == 0) 0 else expenseTotal / recordDays
+    val topCategory = expenseRecords.groupingBy { it.category }.eachCount().maxByOrNull { it.value }?.key ?: "없음"
+    val topEmotion = expenseRecords.groupingBy { it.emotion }.eachCount().maxByOrNull { it.value }?.key ?: "없음"
+    val highestExpense = expenseRecords.maxByOrNull { it.amount }
 
     Column(
         modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ReportSummaryRow(
-            title = "${formatMonthTitle(monthMillis)} 총지출",
-            subtitle = "${expenses.size}개 기록, ${spendDays}일 소비",
-            amount = total,
+            title = "${formatMonthTitle(monthMillis)} 수입",
+            subtitle = "${incomeRecords.size}개 수입 기록",
+            amount = incomeTotal,
+            accent = Color(0xFF3B82F6)
+        )
+        ReportSummaryRow(
+            title = "${formatMonthTitle(monthMillis)} 지출",
+            subtitle = "${expenseRecords.size}개 지출 기록",
+            amount = expenseTotal,
             accent = Color(0xFFFF6651)
+        )
+        ReportSummaryRow(
+            title = "월 잔액",
+            subtitle = "수입에서 지출을 뺀 금액",
+            amount = balance,
+            accent = balanceColor(balance),
+            signed = true
         )
         ReportSummaryRow(
             title = "하루 평균 지출",
             subtitle = "기록이 있는 날짜 기준",
-            amount = avg,
+            amount = averageExpense,
             accent = Color(0xFF0F766E)
         )
-        InsightTextCard(title = "가장 자주 나온 카테고리", value = topCategory)
+        InsightTextCard(title = "가장 자주 나온 지출 카테고리", value = topCategory)
         InsightTextCard(title = "대표 소비 감정", value = topEmotion)
         InsightTextCard(
             title = "가장 큰 지출",
-            value = highest?.let { "${it.memo.ifBlank { it.category }} · ${formatWon(it.amount)}" } ?: "없음"
+            value = highestExpense?.let { "${it.memo.ifBlank { it.category }} · ${formatWon(it.amount)}" } ?: "없음"
         )
     }
 }
 
 @Composable
-private fun ReportBreakdownCard(title: String, rows: List<Pair<String, Int>>) {
+private fun ReportBreakdownCard(title: String, rows: List<Pair<String, Int>>, accent: Color) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color(0xFFF7F8FA),
@@ -583,7 +628,7 @@ private fun ReportBreakdownCard(title: String, rows: List<Pair<String, Int>>) {
                         title = label,
                         subtitle = "월간 합계",
                         amount = amount,
-                        accent = Color(0xFFFF6651)
+                        accent = accent
                     )
                 }
             }
@@ -592,13 +637,22 @@ private fun ReportBreakdownCard(title: String, rows: List<Pair<String, Int>>) {
 }
 
 @Composable
-private fun ReportSummaryRow(title: String, subtitle: String, amount: Int, accent: Color) {
+private fun ReportSummaryRow(
+    title: String,
+    subtitle: String,
+    amount: Int,
+    accent: Color,
+    signed: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -612,7 +666,7 @@ private fun ReportSummaryRow(title: String, subtitle: String, amount: Int, accen
             )
         }
         Text(
-            text = formatWon(amount),
+            text = if (signed) formatSignedWon(amount) else formatWon(amount),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
             color = accent
@@ -665,33 +719,31 @@ private fun ReportEmptyState(message: String) {
     }
 }
 
-private fun buildDailyGroups(expenses: List<Expense>): List<DailyExpenseGroup> {
+private fun buildDailyGroups(records: List<Expense>): List<DailyRecordGroup> {
     // dateMillis를 하루 시작값으로 정규화한 뒤 같은 날짜끼리 묶는다.
-    return expenses
+    return records
         .groupBy { startOfDay(it.dateMillis) }
-        .map { (dayMillis, dayExpenses) ->
-            DailyExpenseGroup(
+        .map { (dayMillis, dayRecords) ->
+            DailyRecordGroup(
                 dayMillis = dayMillis,
-                expenses = dayExpenses.sortedByDescending { it.id },
-                totalAmount = dayExpenses.sumOf { it.amount }
+                records = dayRecords.sortedByDescending { it.id },
+                incomeTotal = dayRecords.sumByType(TransactionType.INCOME),
+                expenseTotal = dayRecords.sumByType(TransactionType.EXPENSE)
             )
         }
         .sortedByDescending { it.dayMillis }
 }
 
-private fun buildCalendarCells(monthMillis: Long, expenses: List<Expense>): List<CalendarDayCell> {
+private fun buildCalendarCells(monthMillis: Long, records: List<Expense>): List<CalendarDayCell> {
     val calendar = Calendar.getInstance().apply { timeInMillis = startOfMonth(monthMillis) }
     val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
     val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-    val totalsByDay = expenses
-        .groupBy { startOfDay(it.dateMillis) }
-        .mapValues { entry -> entry.value.sumOf { it.amount } }
-
+    val recordsByDay = records.groupBy { startOfDay(it.dateMillis) }
     val cells = mutableListOf<CalendarDayCell>()
 
     // 월의 1일이 시작되기 전 요일 칸은 빈 셀로 채운다.
     repeat(firstDayOfWeek - 1) {
-        cells.add(CalendarDayCell(dayNumber = null, dayMillis = null, totalAmount = 0))
+        cells.add(CalendarDayCell(dayNumber = null, incomeTotal = 0, expenseTotal = 0))
     }
 
     for (day in 1..daysInMonth) {
@@ -703,21 +755,32 @@ private fun buildCalendarCells(monthMillis: Long, expenses: List<Expense>): List
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
+        val dayRecords = recordsByDay[dayMillis].orEmpty()
         cells.add(
             CalendarDayCell(
                 dayNumber = day,
-                dayMillis = dayMillis,
-                totalAmount = totalsByDay[dayMillis] ?: 0
+                incomeTotal = dayRecords.sumByType(TransactionType.INCOME),
+                expenseTotal = dayRecords.sumByType(TransactionType.EXPENSE)
             )
         )
     }
 
     // 마지막 주가 7칸이 되도록 빈 셀을 추가한다.
     while (cells.size % 7 != 0) {
-        cells.add(CalendarDayCell(dayNumber = null, dayMillis = null, totalAmount = 0))
+        cells.add(CalendarDayCell(dayNumber = null, incomeTotal = 0, expenseTotal = 0))
     }
 
     return cells
+}
+
+private fun List<Expense>.sumByType(type: TransactionType): Int {
+    return filter { it.type == type }.sumOf { it.amount }
+}
+
+private fun List<Expense>.categoryTotals(): List<Pair<String, Int>> {
+    return groupBy { it.category }
+        .map { it.key to it.value.sumOf { record -> record.amount } }
+        .sortedByDescending { it.second }
 }
 
 private fun startOfDay(millis: Long): Long {
@@ -793,12 +856,28 @@ private fun dayBadgeColor(millis: Long): Color {
     }
 }
 
+private fun recordAmountColor(record: Expense): Color {
+    return if (record.type == TransactionType.INCOME) Color(0xFF3B82F6) else Color(0xFFFF6651)
+}
+
+private fun balanceColor(amount: Int): Color {
+    return if (amount >= 0) Color(0xFF3B82F6) else Color(0xFFFF6651)
+}
+
+private fun formatRecordAmount(record: Expense): String {
+    return if (record.type == TransactionType.INCOME) "+${formatWon(record.amount)}" else "-${formatWon(record.amount)}"
+}
+
 private fun formatWon(amount: Int): String {
     return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
 }
 
 private fun formatSignedWon(amount: Int): String {
-    return if (amount < 0) "-${formatWon(-amount)}" else formatWon(amount)
+    return when {
+        amount > 0 -> "+${formatWon(amount)}"
+        amount < 0 -> "-${formatWon(-amount)}"
+        else -> "0원"
+    }
 }
 
 private fun formatCompactWon(amount: Int): String {
