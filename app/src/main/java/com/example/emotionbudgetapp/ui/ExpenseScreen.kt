@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.emotionbudgetapp.data.Expense
+import com.example.emotionbudgetapp.data.TransactionType
 import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -67,6 +68,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     }
 
     // 입력 폼 상태. remember를 쓰면 화면이 다시 그려져도 사용자가 입력 중인 값이 유지된다.
+    var transactionType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var amountText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("식비") }
     var emotion by remember { mutableStateOf("기쁨") }
@@ -76,50 +78,62 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
     // 검색/필터/다이얼로그처럼 화면 동작을 제어하는 상태들.
     var searchText by remember { mutableStateOf("") }
+    var typeFilter by remember { mutableStateOf("전체") }
     var categoryFilter by remember { mutableStateOf("전체") }
     var emotionFilter by remember { mutableStateOf("전체") }
     var showDatePicker by remember { mutableStateOf(false) }
     var pendingDeleteExpense by remember { mutableStateOf<Expense?>(null) }
 
     // 입력 폼과 필터 드롭다운에서 같이 쓰는 기본 선택지.
-    val categories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
+    val expenseCategories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
+    val incomeCategories = listOf("급여", "용돈", "부수입", "환급", "기타")
+    val activeCategories = if (transactionType == TransactionType.INCOME) incomeCategories else expenseCategories
+    val allCategories = (expenseCategories + incomeCategories).distinct()
     val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
+    val transactionTypeOptions = listOf(TransactionType.EXPENSE.label, TransactionType.INCOME.label)
 
     // 상단 요약 카드와 카테고리 요약 카드에 쓰는 파생 데이터.
-    val totalAmount = expenses.sumOf { it.amount }
-    val topEmotion = expenses
+    val incomeRecords = expenses.filter { it.type == TransactionType.INCOME }
+    val expenseRecords = expenses.filter { it.type == TransactionType.EXPENSE }
+    val incomeTotal = incomeRecords.sumOf { it.amount }
+    val expenseTotal = expenseRecords.sumOf { it.amount }
+    val balance = incomeTotal - expenseTotal
+    val topEmotion = expenseRecords
         .groupingBy { it.emotion }
         .eachCount()
         .maxByOrNull { it.value }
-        ?.key ?: "기록 없음"
-    val biggestAmount = expenses.maxOfOrNull { it.amount } ?: 0
-    val categoryTotals = expenses
+        ?.key ?: "지출 기록 없음"
+    val biggestExpenseAmount = expenseRecords.maxOfOrNull { it.amount } ?: 0
+    val categoryTotals = expenseRecords
         .groupBy { it.category }
         .map { entry -> entry.key to entry.value.sumOf { it.amount } }
         .sortedByDescending { it.second }
 
-    // 검색어, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
+    // 검색어, 타입 필터, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
     val filteredExpenses = expenses
         .filter { expense ->
             val query = searchText.trim()
             val matchesQuery = query.isBlank() ||
+                expense.type.label.contains(query, ignoreCase = true) ||
                 expense.category.contains(query, ignoreCase = true) ||
                 expense.emotion.contains(query, ignoreCase = true) ||
                 expense.memo.contains(query, ignoreCase = true) ||
                 expense.amount.toString().contains(query) ||
                 formatDate(expense.dateMillis).contains(query)
 
+            val matchesType = typeFilter == "전체" || expense.type.label == typeFilter
             val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
-            val matchesEmotion = emotionFilter == "전체" || expense.emotion == emotionFilter
+            val matchesEmotion = emotionFilter == "전체" || expense.type == TransactionType.INCOME || expense.emotion == emotionFilter
 
-            matchesQuery && matchesCategory && matchesEmotion
+            matchesQuery && matchesType && matchesCategory && matchesEmotion
         }
         .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
 
     // 추가/수정이 끝난 뒤 입력 폼을 처음 상태로 되돌린다.
     fun resetForm() {
+        transactionType = TransactionType.EXPENSE
         amountText = ""
-        category = categories.first()
+        category = expenseCategories.first()
         emotion = emotions.first()
         memo = ""
         selectedDateMillis = todayMillis()
@@ -137,10 +151,12 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         ) {
             item {
                 HeaderCard(
-                    totalAmount = totalAmount,
+                    incomeTotal = incomeTotal,
+                    expenseTotal = expenseTotal,
+                    balance = balance,
                     recordCount = expenses.size,
                     topEmotion = topEmotion,
-                    biggestAmount = biggestAmount,
+                    biggestExpenseAmount = biggestExpenseAmount,
                     onReportClick = { showReport = true }
                 )
             }
@@ -153,10 +169,19 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
             item {
                 ExpenseInputCard(
+                    transactionType = transactionType,
+                    transactionTypeOptions = transactionTypeOptions,
+                    onTransactionTypeChange = { selectedLabel ->
+                        transactionType = transactionTypeFromLabel(selectedLabel)
+                        category = if (transactionType == TransactionType.INCOME) incomeCategories.first() else expenseCategories.first()
+                        if (transactionType == TransactionType.INCOME) {
+                            emotion = "평온"
+                        }
+                    },
                     amountText = amountText,
                     onAmountChange = { amountText = it.filter { char -> char.isDigit() } },
                     category = category,
-                    categories = categories,
+                    categories = activeCategories,
                     onCategoryChange = { category = it },
                     emotion = emotion,
                     emotions = emotions,
@@ -173,14 +198,16 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
                         if (amount != null && amount > 0) {
                             val editingId = editingExpenseId
+                            val savedEmotion = if (transactionType == TransactionType.INCOME) "평온" else emotion
                             if (editingId == null) {
-                                // 수정 중인 id가 없으면 새 지출 기록을 추가한다.
+                                // 수정 중인 id가 없으면 새 수입/지출 기록을 추가한다.
                                 viewModel.addExpense(
                                     amount = amount,
                                     category = category,
-                                    emotion = emotion,
+                                    emotion = savedEmotion,
                                     memo = memo,
-                                    dateMillis = selectedDateMillis
+                                    dateMillis = selectedDateMillis,
+                                    type = transactionType
                                 )
                             } else {
                                 // 수정 중이면 같은 id의 기록만 새 입력값으로 교체한다.
@@ -188,9 +215,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                                     id = editingId,
                                     amount = amount,
                                     category = category,
-                                    emotion = emotion,
+                                    emotion = savedEmotion,
                                     memo = memo,
-                                    dateMillis = selectedDateMillis
+                                    dateMillis = selectedDateMillis,
+                                    type = transactionType
                                 )
                             }
                             resetForm()
@@ -203,14 +231,18 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                 FilterCard(
                     searchText = searchText,
                     onSearchTextChange = { searchText = it },
+                    typeFilter = typeFilter,
+                    typeOptions = listOf("전체") + transactionTypeOptions,
+                    onTypeFilterChange = { typeFilter = it },
                     categoryFilter = categoryFilter,
-                    categoryOptions = listOf("전체") + categories,
+                    categoryOptions = listOf("전체") + allCategories,
                     onCategoryFilterChange = { categoryFilter = it },
                     emotionFilter = emotionFilter,
                     emotionOptions = listOf("전체") + emotions,
                     onEmotionFilterChange = { emotionFilter = it },
                     onClearFilters = {
                         searchText = ""
+                        typeFilter = "전체"
                         categoryFilter = "전체"
                         emotionFilter = "전체"
                     }
@@ -229,7 +261,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     if (expenses.isEmpty()) {
                         EmptyRecordCard(
                             title = "아직 기록이 없어요",
-                            message = "금액과 감정을 입력하면 여기에 지출 기록이 쌓입니다."
+                            message = "수입이나 지출을 입력하면 여기에 기록이 쌓입니다."
                         )
                     } else {
                         EmptyRecordCard(
@@ -244,6 +276,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                         expense = expense,
                         onEdit = {
                             // 선택한 기록의 값을 입력 폼에 다시 채워 수정 모드로 전환한다.
+                            transactionType = expense.type
                             amountText = expense.amount.toString()
                             category = expense.category
                             emotion = expense.emotion
@@ -265,7 +298,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         AlertDialog(
             onDismissRequest = { pendingDeleteExpense = null },
             title = { Text("기록 삭제") },
-            text = { Text("${formatWon(expense.amount)} 지출 기록을 삭제할까요?") },
+            text = { Text("${expense.type.label} ${formatWon(expense.amount)} 기록을 삭제할까요?") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -320,10 +353,12 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
 @Composable
 private fun HeaderCard(
-    totalAmount: Int,
+    incomeTotal: Int,
+    expenseTotal: Int,
+    balance: Int,
     recordCount: Int,
     topEmotion: String,
-    biggestAmount: Int,
+    biggestExpenseAmount: Int,
     onReportClick: () -> Unit
 ) {
     ElevatedCard(
@@ -345,12 +380,12 @@ private fun HeaderCard(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "소비한 순간의 감정까지 함께 기록해요.",
+                text = "수입과 지출, 소비한 순간의 감정까지 함께 기록해요.",
                 color = Color(0xFFD6DEEB),
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = formatWon(totalAmount),
+                text = formatSignedWon(balance),
                 color = Color.White,
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold
@@ -360,10 +395,25 @@ private fun HeaderCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 SummaryMetric(
+                    title = "수입",
+                    value = formatWon(incomeTotal),
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryMetric(
+                    title = "지출",
+                    value = formatWon(expenseTotal),
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryMetric(
                     title = "기록",
                     value = "${recordCount}개",
                     modifier = Modifier.weight(1f)
                 )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 SummaryMetric(
                     title = "대표 감정",
                     value = topEmotion,
@@ -371,7 +421,7 @@ private fun HeaderCard(
                 )
                 SummaryMetric(
                     title = "최대 지출",
-                    value = formatWon(biggestAmount),
+                    value = formatWon(biggestExpenseAmount),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -428,7 +478,7 @@ private fun CategoryTotalsCard(categoryTotals: List<Pair<String, Int>>) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "카테고리별 합계",
+                text = "지출 카테고리별 합계",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF172033)
@@ -448,7 +498,7 @@ private fun CategoryTotalsCard(categoryTotals: List<Pair<String, Int>>) {
                         text = formatWon(total),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF0F766E)
+                        color = Color(0xFFFF6651)
                     )
                 }
             }
@@ -458,6 +508,9 @@ private fun CategoryTotalsCard(categoryTotals: List<Pair<String, Int>>) {
 
 @Composable
 private fun ExpenseInputCard(
+    transactionType: TransactionType,
+    transactionTypeOptions: List<String>,
+    onTransactionTypeChange: (String) -> Unit,
     amountText: String,
     onAmountChange: (String) -> Unit,
     category: String,
@@ -475,6 +528,8 @@ private fun ExpenseInputCard(
     onCancelEdit: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    val isIncome = transactionType == TransactionType.INCOME
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -488,10 +543,18 @@ private fun ExpenseInputCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = if (isEditing) "지출 기록 수정" else "새 지출 기록",
+                text = if (isEditing) "기록 수정" else "새 기록",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF172033)
+            )
+
+            DropdownSelector(
+                label = "유형",
+                selectedValue = transactionType.label,
+                options = transactionTypeOptions,
+                onSelected = onTransactionTypeChange,
+                modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
@@ -511,31 +574,41 @@ private fun ExpenseInputCard(
                 Text("날짜: $selectedDateText")
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            if (isIncome) {
                 DropdownSelector(
-                    label = "카테고리",
+                    label = "수입 카테고리",
                     selectedValue = category,
                     options = categories,
                     onSelected = onCategoryChange,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
-                DropdownSelector(
-                    label = "감정",
-                    selectedValue = emotion,
-                    options = emotions,
-                    onSelected = onEmotionChange,
-                    modifier = Modifier.weight(1f)
-                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    DropdownSelector(
+                        label = "지출 카테고리",
+                        selectedValue = category,
+                        options = categories,
+                        onSelected = onCategoryChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DropdownSelector(
+                        label = "감정",
+                        selectedValue = emotion,
+                        options = emotions,
+                        onSelected = onEmotionChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             OutlinedTextField(
                 value = memo,
                 onValueChange = onMemoChange,
                 label = { Text("메모") },
-                placeholder = { Text("예: 시험 끝나고 친구와 저녁") },
+                placeholder = { Text(if (isIncome) "예: 알바비, 용돈" else "예: 시험 끝나고 친구와 저녁") },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -575,6 +648,9 @@ private fun ExpenseInputCard(
 private fun FilterCard(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
+    typeFilter: String,
+    typeOptions: List<String>,
+    onTypeFilterChange: (String) -> Unit,
     categoryFilter: String,
     categoryOptions: List<String>,
     onCategoryFilterChange: (String) -> Unit,
@@ -604,8 +680,16 @@ private fun FilterCard(
                 value = searchText,
                 onValueChange = onSearchTextChange,
                 label = { Text("검색") },
-                placeholder = { Text("메모, 금액, 날짜, 감정 검색") },
+                placeholder = { Text("메모, 금액, 날짜, 유형, 감정 검색") },
                 singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            DropdownSelector(
+                label = "유형",
+                selectedValue = typeFilter,
+                options = typeOptions,
+                onSelected = onTypeFilterChange,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -629,7 +713,7 @@ private fun FilterCard(
                 )
             }
 
-            if (searchText.isNotBlank() || categoryFilter != "전체" || emotionFilter != "전체") {
+            if (searchText.isNotBlank() || typeFilter != "전체" || categoryFilter != "전체" || emotionFilter != "전체") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -736,8 +820,16 @@ fun DropdownSelector(
     }
 }
 
+private fun transactionTypeFromLabel(label: String): TransactionType {
+    return if (label == TransactionType.INCOME.label) TransactionType.INCOME else TransactionType.EXPENSE
+}
+
 private fun formatWon(amount: Int): String {
     return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
+}
+
+private fun formatSignedWon(amount: Int): String {
+    return if (amount < 0) "-${formatWon(-amount)}" else formatWon(amount)
 }
 
 private fun formatDate(millis: Long): String {
