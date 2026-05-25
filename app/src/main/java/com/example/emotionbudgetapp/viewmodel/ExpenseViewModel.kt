@@ -72,7 +72,11 @@ class ExpenseViewModel : ViewModel() {
         _expenses.value = _expenses.value.filter { it.id != expense.id }
     }
 
-    fun loadSampleData(referenceMillis: Long = System.currentTimeMillis()) {
+    fun loadSampleData() {
+        loadSampleData(System.currentTimeMillis())
+    }
+
+    fun loadSampleData(referenceMillis: Long) {
         val today = normalizeDay(referenceMillis)
         val yesterday = addDays(today, -1)
         val twoDaysAgo = addDays(today, -2)
