@@ -46,6 +46,18 @@ private data class EmotionStat(
     val share: Float
 )
 
+// 앱의 차별점이 되는 감정 소비 진단 카드용 모델.
+// 단순 합계가 아니라 위험도, 주요 감정, 추천 행동까지 한 문장으로 해석한다.
+private data class EmotionDiagnosis(
+    val riskLabel: String,
+    val riskScore: Int,
+    val title: String,
+    val message: String,
+    val primaryEmotion: String,
+    val stressSignal: String,
+    val recommendation: String
+)
+
 @Composable
 fun EmotionAnalysisScreen(
     expenses: List<Expense>,
@@ -66,10 +78,16 @@ fun EmotionAnalysisScreen(
     val monthExpenses = expenseOnlyRecords.filter { it.dateMillis >= monthStart && it.dateMillis < monthEnd }
     val previousMonthExpenses = expenseOnlyRecords.filter { it.dateMillis >= previousMonthStart && it.dateMillis < monthStart }
     val emotionStats = buildEmotionStats(monthExpenses, previousMonthExpenses)
+    val activeEmotionStats = emotionStats.filter { it.count > 0 }
     val monthTotal = monthExpenses.sumOf { it.amount }
-    val topSpendingEmotion = emotionStats.maxByOrNull { it.totalAmount }
-    val topCountEmotion = emotionStats.maxByOrNull { it.count }
+    val topSpendingEmotion = activeEmotionStats.maxByOrNull { it.totalAmount }
+    val topCountEmotion = activeEmotionStats.maxByOrNull { it.count }
     val stressStat = emotionStats.firstOrNull { it.emotion == "스트레스" }
+    val diagnosis = buildEmotionDiagnosis(
+        monthExpenses = monthExpenses,
+        emotionStats = emotionStats,
+        stressStat = stressStat
+    )
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -96,6 +114,10 @@ fun EmotionAnalysisScreen(
                     stressStat = stressStat,
                     recordCount = monthExpenses.size
                 )
+            }
+
+            item {
+                EmotionDiagnosisCard(diagnosis = diagnosis)
             }
 
             item {
@@ -273,6 +295,149 @@ private fun EmotionMetricBox(
 }
 
 @Composable
+private fun EmotionDiagnosisCard(diagnosis: EmotionDiagnosis) {
+    val accent = diagnosisRiskColor(diagnosis.riskLabel)
+    val riskFraction = (diagnosis.riskScore / 100f).coerceIn(0f, 1f)
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "감정 소비 진단",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF172033)
+                )
+                Surface(
+                    color = accent.copy(alpha = 0.13f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        text = diagnosis.riskLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = accent
+                    )
+                }
+            }
+
+            Text(
+                text = diagnosis.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF263244)
+            )
+            Text(
+                text = diagnosis.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF475569)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color(0xFFE2E8F0),
+                    shape = RoundedCornerShape(8.dp)
+                ) {}
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(riskFraction)
+                        .height(8.dp),
+                    color = accent,
+                    shape = RoundedCornerShape(8.dp)
+                ) {}
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DiagnosisMetricBox(
+                    label = "주요 감정",
+                    value = diagnosis.primaryEmotion,
+                    modifier = Modifier.weight(1f)
+                )
+                DiagnosisMetricBox(
+                    label = "스트레스 신호",
+                    value = diagnosis.stressSignal,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFF8FAFC),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text(
+                        text = "추천 행동",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF64748B)
+                    )
+                    Text(
+                        text = diagnosis.recommendation,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF263244)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosisMetricBox(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = Color(0xFFF1F5F9),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF64748B)
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172033)
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmotionInsightCard(title: String, message: String) {
     Surface(
         modifier = Modifier
@@ -436,6 +601,79 @@ private fun buildEmotionStats(
     )
 }
 
+private fun buildEmotionDiagnosis(
+    monthExpenses: List<Expense>,
+    emotionStats: List<EmotionStat>,
+    stressStat: EmotionStat?
+): EmotionDiagnosis {
+    if (monthExpenses.isEmpty()) {
+        return EmotionDiagnosis(
+            riskLabel = "대기",
+            riskScore = 0,
+            title = "아직 진단할 지출 기록이 없어요",
+            message = "지출과 감정을 함께 기록하면 이번 달 감정 소비 위험도를 자동으로 계산해요.",
+            primaryEmotion = "없음",
+            stressSignal = "기록 없음",
+            recommendation = "시연할 때는 스트레스, 기쁨, 평온처럼 서로 다른 감정의 지출을 3개 이상 넣어보세요. 진단 카드가 더 또렷하게 보입니다."
+        )
+    }
+
+    val monthTotal = monthExpenses.sumOf { it.amount }.takeIf { it > 0 } ?: 1
+    val activeStats = emotionStats.filter { it.count > 0 }
+    val primaryStat = activeStats.maxByOrNull { it.totalAmount }
+    val primaryEmotion = primaryStat?.emotion ?: "없음"
+    val primaryCategory = monthExpenses
+        .filter { it.emotion == primaryEmotion }
+        .groupingBy { it.category }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key ?: "기록 없음"
+    val stressCount = stressStat?.count ?: 0
+    val stressAmount = stressStat?.totalAmount ?: 0
+    val stressShare = stressAmount.toFloat() / monthTotal.toFloat()
+    val stressChange = stressStat?.countChange ?: 0
+    val riskScore = (
+        20 +
+            (stressCount * 12).coerceAtMost(30) +
+            if (stressChange > 0) 20 else 0 +
+            if (stressShare >= 0.3f) 25 else 0 +
+            if (primaryEmotion == "스트레스") 15 else 0
+        ).coerceIn(0, 100)
+
+    val riskLabel = when {
+        riskScore >= 70 -> "높음"
+        riskScore >= 40 -> "보통"
+        else -> "낮음"
+    }
+    val title = when (riskLabel) {
+        "높음" -> "감정 소비 주의 단계예요"
+        "보통" -> "감정 소비를 관찰할 단계예요"
+        else -> "감정 소비가 안정적인 편이에요"
+    }
+    val message = "${primaryEmotion} 감정에서 ${formatWon(primaryStat?.totalAmount ?: 0)}을 사용했고, ${primaryCategory} 지출과 가장 자주 연결됐어요."
+    val stressSignal = when {
+        stressCount == 0 -> "스트레스 기록 없음"
+        stressChange > 0 -> "${stressCount}회, +${stressChange}회"
+        stressChange < 0 -> "${stressCount}회, ${stressChange}회"
+        else -> "${stressCount}회, 변화 없음"
+    }
+    val recommendation = when (riskLabel) {
+        "높음" -> "${primaryCategory} 지출 전에는 메모에 소비 이유를 한 줄 적고 10분 뒤 결제해보세요. 감정성 지출을 줄이는 장치가 됩니다."
+        "보통" -> "${primaryEmotion} 감정일 때 ${primaryCategory} 지출이 반복되는지 며칠 더 관찰해보세요. 반복되면 월 예산을 따로 잡는 게 좋아요."
+        else -> "현재 패턴은 안정적이에요. 다음 목표는 감정별 평균 지출을 유지하면서 불필요한 반복 지출을 줄이는 것입니다."
+    }
+
+    return EmotionDiagnosis(
+        riskLabel = riskLabel,
+        riskScore = riskScore,
+        title = title,
+        message = message,
+        primaryEmotion = primaryEmotion,
+        stressSignal = stressSignal,
+        recommendation = recommendation
+    )
+}
+
 private fun buildStressInsight(stressStat: EmotionStat?): String {
     // 스트레스 소비는 앱의 핵심 인사이트라 별도 문장으로 뽑아 상단에 보여준다.
     if (stressStat == null || (stressStat.count == 0 && stressStat.previousCount == 0)) {
@@ -446,6 +684,15 @@ private fun buildStressInsight(stressStat: EmotionStat?): String {
         stressStat.countChange > 0 -> "스트레스 소비가 이번 달 ${stressStat.countChange}회 증가했어요. 평균은 ${formatWon(stressStat.averageAmount)}입니다."
         stressStat.countChange < 0 -> "스트레스 소비가 지난달보다 ${-stressStat.countChange}회 줄었어요."
         else -> "스트레스 소비 횟수는 지난달과 같아요. 이번 달 평균은 ${formatWon(stressStat.averageAmount)}입니다."
+    }
+}
+
+private fun diagnosisRiskColor(riskLabel: String): Color {
+    return when (riskLabel) {
+        "높음" -> Color(0xFFFF6651)
+        "보통" -> Color(0xFFF59E0B)
+        "낮음" -> Color(0xFF0F766E)
+        else -> Color(0xFF64748B)
     }
 }
 
