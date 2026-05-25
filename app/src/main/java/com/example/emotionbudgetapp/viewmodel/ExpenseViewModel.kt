@@ -3,6 +3,7 @@ package com.example.emotionbudgetapp.viewmodel
 import androidx.lifecycle.ViewModel
 import com.example.emotionbudgetapp.data.Expense
 import com.example.emotionbudgetapp.data.TransactionType
+import java.util.Calendar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -71,6 +72,82 @@ class ExpenseViewModel : ViewModel() {
         _expenses.value = _expenses.value.filter { it.id != expense.id }
     }
 
+    fun loadSampleData(referenceMillis: Long = System.currentTimeMillis()) {
+        val today = normalizeDay(referenceMillis)
+        val yesterday = addDays(today, -1)
+        val twoDaysAgo = addDays(today, -2)
+        val fourDaysAgo = addDays(today, -4)
+        val previousMonth = addMonths(startOfMonth(referenceMillis), -1)
+
+        // 발표/시연용 데이터는 현재 입력값과 섞이지 않도록 목록을 교체한다.
+        nextId = 1
+        _expenses.value = listOf(
+            Expense(
+                id = nextId++,
+                amount = 3000000,
+                category = "급여",
+                emotion = "평온",
+                memo = "월급",
+                dateMillis = today,
+                type = TransactionType.INCOME
+            ),
+            Expense(
+                id = nextId++,
+                amount = 4800,
+                category = "카페",
+                emotion = "스트레스",
+                memo = "과제하다가 커피",
+                dateMillis = today,
+                type = TransactionType.EXPENSE
+            ),
+            Expense(
+                id = nextId++,
+                amount = 23000,
+                category = "식비",
+                emotion = "기쁨",
+                memo = "친구와 저녁",
+                dateMillis = yesterday,
+                type = TransactionType.EXPENSE
+            ),
+            Expense(
+                id = nextId++,
+                amount = 59000,
+                category = "쇼핑",
+                emotion = "스트레스",
+                memo = "기분 전환 쇼핑",
+                dateMillis = twoDaysAgo,
+                type = TransactionType.EXPENSE
+            ),
+            Expense(
+                id = nextId++,
+                amount = 14500,
+                category = "교통",
+                emotion = "평온",
+                memo = "지하철/버스",
+                dateMillis = fourDaysAgo,
+                type = TransactionType.EXPENSE
+            ),
+            Expense(
+                id = nextId++,
+                amount = 12000,
+                category = "카페",
+                emotion = "스트레스",
+                memo = "시험 준비",
+                dateMillis = addDays(previousMonth, 12),
+                type = TransactionType.EXPENSE
+            ),
+            Expense(
+                id = nextId++,
+                amount = 18000,
+                category = "식비",
+                emotion = "외로움",
+                memo = "혼밥",
+                dateMillis = addDays(previousMonth, 16),
+                type = TransactionType.EXPENSE
+            )
+        )
+    }
+
     fun getTotalAmount(): Int {
         // 기존 호출 호환을 위해 지출 총액을 반환한다.
         return getExpenseTotal()
@@ -98,5 +175,44 @@ class ExpenseViewModel : ViewModel() {
             .filter { it.type == type }
             .groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
+    }
+
+    private fun normalizeDay(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun startOfMonth(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun addDays(millis: Long, amount: Int): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            add(Calendar.DAY_OF_MONTH, amount)
+        }.timeInMillis
+    }
+
+    private fun addMonths(millis: Long, amount: Int): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            add(Calendar.MONTH, amount)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     }
 }
