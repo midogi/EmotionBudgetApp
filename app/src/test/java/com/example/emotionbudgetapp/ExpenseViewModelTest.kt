@@ -117,4 +117,20 @@ class ExpenseViewModelTest {
         assertEquals(3000000, incomeTotals["급여"])
         assertEquals(15000, viewModel.getTotalAmount())
     }
+
+    @Test
+    fun loadSampleData_replacesListWithDemoIncomeAndExpenses() {
+        val viewModel = ExpenseViewModel()
+        viewModel.addExpense(1000, "기타", "평온", "기존 기록", 1000L)
+
+        viewModel.loadSampleData(referenceMillis = 1_700_000_000_000L)
+
+        val records = viewModel.expenses.value
+        assertEquals(7, records.size)
+        assertEquals(1, records.first().id)
+        assertEquals(TransactionType.INCOME, records.first().type)
+        assertEquals(3000000, viewModel.getIncomeTotal())
+        assertEquals(131300, viewModel.getExpenseTotal())
+        assertEquals(true, records.any { it.emotion == "스트레스" && it.type == TransactionType.EXPENSE })
+    }
 }
