@@ -56,17 +56,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     // ViewModel의 StateFlow를 Compose State로 바꿔서 화면이 목록 변화를 자동으로 따라가게 한다.
     val expenses by viewModel.expenses.collectAsState()
 
-    // 메인 화면 안에서 상세 통계 화면으로 넘어갈지 결정하는 단순 화면 전환 상태.
-    var showReport by remember { mutableStateOf(false) }
-
-    if (showReport) {
-        LedgerReportScreen(
-            expenses = expenses,
-            onBack = { showReport = false }
-        )
-        return
-    }
-
     // 입력 폼 상태. remember를 쓰면 화면이 다시 그려져도 사용자가 입력 중인 값이 유지된다.
     var transactionType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var amountText by remember { mutableStateOf("") }
@@ -123,7 +112,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
             val matchesType = typeFilter == "전체" || expense.type.label == typeFilter
             val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
-            val matchesEmotion = emotionFilter == "전체" || expense.type == TransactionType.INCOME || expense.emotion == emotionFilter
+            val matchesEmotion = emotionFilter == "전체" ||
+                (expense.type == TransactionType.EXPENSE && expense.emotion == emotionFilter)
 
             matchesQuery && matchesType && matchesCategory && matchesEmotion
         }
@@ -156,8 +146,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     balance = balance,
                     recordCount = expenses.size,
                     topEmotion = topEmotion,
-                    biggestExpenseAmount = biggestExpenseAmount,
-                    onReportClick = { showReport = true }
+                    biggestExpenseAmount = biggestExpenseAmount
                 )
             }
 
@@ -233,7 +222,12 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     onSearchTextChange = { searchText = it },
                     typeFilter = typeFilter,
                     typeOptions = listOf("전체") + transactionTypeOptions,
-                    onTypeFilterChange = { typeFilter = it },
+                    onTypeFilterChange = { selectedType ->
+                        typeFilter = selectedType
+                        if (selectedType == TransactionType.INCOME.label) {
+                            emotionFilter = "전체"
+                        }
+                    },
                     categoryFilter = categoryFilter,
                     categoryOptions = listOf("전체") + allCategories,
                     onCategoryFilterChange = { categoryFilter = it },
@@ -261,7 +255,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     if (expenses.isEmpty()) {
                         EmptyRecordCard(
                             title = "아직 기록이 없어요",
-                            message = "수입이나 지출을 입력하면 여기에 기록이 쌓입니다."
+                            message = "샘플 데이터를 불러오거나 수입/지출을 직접 입력하면 여기에 기록이 쌓입니다.",
+                            actionLabel = "샘플 데이터 불러오기",
+                            onAction = viewModel::loadSampleData
                         )
                     } else {
                         EmptyRecordCard(
@@ -358,8 +354,7 @@ private fun HeaderCard(
     balance: Int,
     recordCount: Int,
     topEmotion: String,
-    biggestExpenseAmount: Int,
-    onReportClick: () -> Unit
+    biggestExpenseAmount: Int
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -424,12 +419,6 @@ private fun HeaderCard(
                     value = formatWon(biggestExpenseAmount),
                     modifier = Modifier.weight(1f)
                 )
-            }
-            Button(
-                onClick = onReportClick,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("상세 통계 보기")
             }
         }
     }
@@ -659,6 +648,8 @@ private fun FilterCard(
     onEmotionFilterChange: (String) -> Unit,
     onClearFilters: () -> Unit
 ) {
+    val showEmotionFilter = typeFilter != TransactionType.INCOME.label
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -693,23 +684,33 @@ private fun FilterCard(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            if (showEmotionFilter) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    DropdownSelector(
+                        label = "카테고리",
+                        selectedValue = categoryFilter,
+                        options = categoryOptions,
+                        onSelected = onCategoryFilterChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DropdownSelector(
+                        label = "지출 감정",
+                        selectedValue = emotionFilter,
+                        options = emotionOptions,
+                        onSelected = onEmotionFilterChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
                 DropdownSelector(
                     label = "카테고리",
                     selectedValue = categoryFilter,
                     options = categoryOptions,
                     onSelected = onCategoryFilterChange,
-                    modifier = Modifier.weight(1f)
-                )
-                DropdownSelector(
-                    label = "감정",
-                    selectedValue = emotionFilter,
-                    options = emotionOptions,
-                    onSelected = onEmotionFilterChange,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -748,7 +749,12 @@ private fun SectionTitle(recordCount: Int, totalCount: Int) {
 }
 
 @Composable
-private fun EmptyRecordCard(title: String, message: String) {
+private fun EmptyRecordCard(
+    title: String,
+    message: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
@@ -756,7 +762,7 @@ private fun EmptyRecordCard(title: String, message: String) {
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = title,
@@ -769,6 +775,14 @@ private fun EmptyRecordCard(title: String, message: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF5D6B82)
             )
+            if (actionLabel != null && onAction != null) {
+                Button(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(actionLabel)
+                }
+            }
         }
     }
 }
