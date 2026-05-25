@@ -38,8 +38,7 @@ fun EmotionBudgetAppRoot(viewModel: ExpenseViewModel) {
                     NavigationBarItem(
                         selected = currentDestination == destination,
                         onClick = { currentDestination = destination },
-                        label = { Text(destination.label) },
-                        icon = { Text(destination.label.first().toString()) }
+                        icon = { Text(destination.label) }
                     )
                 }
             }
