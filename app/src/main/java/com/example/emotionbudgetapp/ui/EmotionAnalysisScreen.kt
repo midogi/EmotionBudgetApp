@@ -632,12 +632,20 @@ private fun buildEmotionDiagnosis(
     val stressAmount = stressStat?.totalAmount ?: 0
     val stressShare = stressAmount.toFloat() / monthTotal.toFloat()
     val stressChange = stressStat?.countChange ?: 0
+
+    // 위험도 점수는 각 신호를 독립 점수로 나눈 뒤 합산한다.
+    // 이렇게 두면 발표 때도 "횟수, 증가 여부, 비중, 대표 감정" 기준을 바로 설명할 수 있다.
+    val baseScore = 20
+    val stressCountScore = (stressCount * 12).coerceAtMost(30)
+    val stressIncreaseScore = if (stressChange > 0) 20 else 0
+    val stressShareScore = if (stressShare >= 0.3f) 25 else 0
+    val primaryStressScore = if (primaryEmotion == "스트레스") 15 else 0
     val riskScore = (
-        20 +
-            (stressCount * 12).coerceAtMost(30) +
-            if (stressChange > 0) 20 else 0 +
-            if (stressShare >= 0.3f) 25 else 0 +
-            if (primaryEmotion == "스트레스") 15 else 0
+        baseScore +
+            stressCountScore +
+            stressIncreaseScore +
+            stressShareScore +
+            primaryStressScore
         ).coerceIn(0, 100)
 
     val riskLabel = when {
