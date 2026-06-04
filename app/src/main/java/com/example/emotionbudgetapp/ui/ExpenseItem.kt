@@ -54,7 +54,7 @@ fun ExpenseItem(
                         color = Color(0xFF172033)
                     )
                     Text(
-                        text = "감정: ${expense.emotion}",
+                        text = "${formatDate(expense.dateMillis)} · 감정: ${expense.emotion}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF5D6B82)
                     )
@@ -70,6 +70,7 @@ fun ExpenseItem(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                InfoBadge(text = formatDate(expense.dateMillis))
                 InfoBadge(text = expense.category)
                 InfoBadge(text = expense.emotion)
             }

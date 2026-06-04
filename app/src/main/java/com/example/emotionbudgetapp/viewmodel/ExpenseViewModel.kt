@@ -15,6 +15,7 @@ class ExpenseViewModel : ViewModel() {
     private var nextId = 1
 
     fun addExpense(
+        dateMillis: Long,
         amount: Int,
         category: String,
         emotion: String,
@@ -23,6 +24,7 @@ class ExpenseViewModel : ViewModel() {
         // 사용자가 입력한 값을 Expense 객체로 만든다.
         val newExpense = Expense(
             id = nextId++,
+            dateMillis = dateMillis,
             amount = amount,
             category = category,
             emotion = emotion,

@@ -1,29 +1,21 @@
 package com.example.emotionbudgetapp.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,11 +26,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.emotionbudgetapp.data.Expense
 import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
-import java.text.NumberFormat
-import java.util.Locale
 
 @Composable
 fun ExpenseScreen(viewModel: ExpenseViewModel) {
@@ -47,13 +37,22 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
     // 사용자가 입력 중인 값들을 저장하는 화면 상태
     var amountText by remember { mutableStateOf("") }
+    var selectedDateMillis by remember { mutableStateOf(startOfTodayMillis()) }
     var category by remember { mutableStateOf("식비") }
     var emotion by remember { mutableStateOf("기쁨") }
     var memo by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableStateOf(ExpenseTab.RECORDS) }
+    var autoEmotionEnabled by remember { mutableStateOf(true) }
 
     val categories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
     val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
+    val emotionRecommendation = recommendEmotionFromMemo(memo, emotions)
+    val sortedExpenses = expenses.sortedWith(
+        compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id }
+    )
     val totalAmount = expenses.sumOf { it.amount }
+    val emotionStats = buildStats(expenses) { it.emotion }
+    val categoryStats = buildStats(expenses) { it.category }
     val topEmotion = expenses
         .groupingBy { it.emotion }
         .eachCount()
@@ -80,44 +79,86 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             }
 
             item {
-                ExpenseInputCard(
-                    amountText = amountText,
-                    onAmountChange = { amountText = it.filter { char -> char.isDigit() } },
-                    category = category,
-                    categories = categories,
-                    onCategoryChange = { category = it },
-                    emotion = emotion,
-                    emotions = emotions,
-                    onEmotionChange = { emotion = it },
-                    memo = memo,
-                    onMemoChange = { memo = it },
-                    onAddClick = {
-                        val amount = amountText.toIntOrNull()
-
-                        if (amount != null && amount > 0) {
-                            viewModel.addExpense(amount, category, emotion, memo)
-                            amountText = ""
-                            memo = ""
-                        }
-                    }
+                ExpenseTabRow(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
                 )
             }
 
-            item {
-                SectionTitle(recordCount = expenses.size)
-            }
-
-            if (expenses.isEmpty()) {
+            if (selectedTab == ExpenseTab.RECORDS) {
                 item {
-                    EmptyRecordCard()
+                    ExpenseInputCard(
+                        amountText = amountText,
+                        onAmountChange = { amountText = it.filter { char -> char.isDigit() } },
+                        dateMillis = selectedDateMillis,
+                        onDateChange = { selectedDateMillis = it },
+                        category = category,
+                        categories = categories,
+                        onCategoryChange = { category = it },
+                        emotion = emotion,
+                        emotions = emotions,
+                        onEmotionChange = { selectedEmotion ->
+                            emotion = selectedEmotion
+                            autoEmotionEnabled = emotionRecommendation?.emotion == selectedEmotion
+                        },
+                        memo = memo,
+                        onMemoChange = { newMemo ->
+                            memo = newMemo
+
+                            if (newMemo.isBlank()) {
+                                autoEmotionEnabled = true
+                            }
+
+                            val recommendation = recommendEmotionFromMemo(newMemo, emotions)
+
+                            if (autoEmotionEnabled && recommendation != null) {
+                                emotion = recommendation.emotion
+                            }
+                        },
+                        emotionRecommendation = emotionRecommendation,
+                        onApplyEmotionRecommendation = { recommendedEmotion ->
+                            emotion = recommendedEmotion
+                            autoEmotionEnabled = true
+                        },
+                        onAddClick = {
+                            val amount = amountText.toIntOrNull()
+
+                            if (amount != null && amount > 0) {
+                                viewModel.addExpense(selectedDateMillis, amount, category, emotion, memo)
+                                amountText = ""
+                                memo = ""
+                                selectedDateMillis = startOfTodayMillis()
+                                autoEmotionEnabled = true
+                            }
+                        }
+                    )
+                }
+
+                item {
+                    SectionTitle(recordCount = expenses.size)
+                }
+
+                if (expenses.isEmpty()) {
+                    item {
+                        EmptyRecordCard()
+                    }
+                } else {
+                    items(sortedExpenses, key = { it.id }) { expense ->
+                        ExpenseItem(
+                            expense = expense,
+                            onDelete = {
+                                viewModel.deleteExpense(expense)
+                            }
+                        )
+                    }
                 }
             } else {
-                items(expenses, key = { it.id }) { expense ->
-                    ExpenseItem(
-                        expense = expense,
-                        onDelete = {
-                            viewModel.deleteExpense(expense)
-                        }
+                item {
+                    StatisticsScreen(
+                        recordCount = expenses.size,
+                        totalAmount = totalAmount,
+                        emotionStats = emotionStats,
+                        categoryStats = categoryStats
                     )
                 }
             }
@@ -216,82 +257,28 @@ private fun SummaryMetric(
 }
 
 @Composable
-private fun ExpenseInputCard(
-    amountText: String,
-    onAmountChange: (String) -> Unit,
-    category: String,
-    categories: List<String>,
-    onCategoryChange: (String) -> Unit,
-    emotion: String,
-    emotions: List<String>,
-    onEmotionChange: (String) -> Unit,
-    memo: String,
-    onMemoChange: (String) -> Unit,
-    onAddClick: () -> Unit
+private fun ExpenseTabRow(
+    selectedTab: ExpenseTab,
+    onTabSelected: (ExpenseTab) -> Unit
 ) {
-    ElevatedCard(
+    val tabs = listOf(ExpenseTab.RECORDS, ExpenseTab.STATISTICS)
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = Color.White
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        color = Color.White,
+        shape = RoundedCornerShape(8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        TabRow(
+            selectedTabIndex = tabs.indexOf(selectedTab),
+            containerColor = Color.White,
+            contentColor = Color(0xFF172033)
         ) {
-            Text(
-                text = "새 지출 기록",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF172033)
-            )
-
-            OutlinedTextField(
-                value = amountText,
-                onValueChange = onAmountChange,
-                label = { Text("금액") },
-                suffix = { Text("원") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                DropdownSelector(
-                    label = "카테고리",
-                    selectedValue = category,
-                    options = categories,
-                    onSelected = onCategoryChange,
-                    modifier = Modifier.weight(1f)
+            tabs.forEach { tab ->
+                Tab(
+                    selected = selectedTab == tab,
+                    onClick = { onTabSelected(tab) },
+                    text = { Text(tab.title) }
                 )
-                DropdownSelector(
-                    label = "감정",
-                    selectedValue = emotion,
-                    options = emotions,
-                    onSelected = onEmotionChange,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            OutlinedTextField(
-                value = memo,
-                onValueChange = onMemoChange,
-                label = { Text("메모") },
-                placeholder = { Text("예: 시험 끝나고 친구와 저녁") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(
-                onClick = onAddClick,
-                enabled = amountText.toIntOrNull()?.let { it > 0 } == true,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("기록 추가")
             }
         }
     }
@@ -335,7 +322,7 @@ private fun EmptyRecordCard() {
                 color = Color(0xFF172033)
             )
             Text(
-                text = "금액과 감정을 입력하면 여기에 지출 기록이 쌓입니다.",
+                text = "날짜, 금액, 감정을 입력하면 여기에 지출 기록이 쌓입니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF5D6B82)
             )
@@ -343,52 +330,7 @@ private fun EmptyRecordCard() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DropdownSelector(
-    label: String,
-    selectedValue: String,
-    options: List<String>,
-    onSelected: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = modifier
-    ) {
-        OutlinedTextField(
-            value = selectedValue,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-private fun formatWon(amount: Int): String {
-    return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
+private enum class ExpenseTab(val title: String) {
+    RECORDS("기록"),
+    STATISTICS("통계")
 }
