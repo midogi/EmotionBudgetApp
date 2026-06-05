@@ -143,7 +143,7 @@ fun EmotionAnalysisScreen(
 
             if (emotionStats.none { it.count > 0 }) {
                 item {
-                    EmotionEmptyState()
+                    EmotionEmptyState(onRecordClick = onBack)
                 }
             } else {
                 item {
@@ -686,7 +686,7 @@ private fun EmotionShareBar(share: Float) {
 }
 
 @Composable
-private fun EmotionEmptyState() {
+private fun EmotionEmptyState(onRecordClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -694,12 +694,25 @@ private fun EmotionEmptyState() {
         color = Color.White,
         shape = RoundedCornerShape(8.dp)
     ) {
-        Text(
+        Column(
             modifier = Modifier.padding(18.dp),
-            text = "이번 달 지출 기록이 생기면 감정별 총액, 횟수, 평균 지출을 자동으로 분석해요.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF64748B)
-        )
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "분석할 지출 기록이 없어요",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172033)
+            )
+            Text(
+                text = "이번 달 지출 기록이 생기면 감정별 총액, 횟수, 평균 지출과 소비 패턴 그래프가 자동으로 채워집니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF64748B)
+            )
+            TextButton(onClick = onRecordClick) {
+                Text("기록 화면으로 이동")
+            }
+        }
     }
 }
 

@@ -22,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -166,6 +167,18 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         editingExpenseId = null
     }
 
+    fun clearRecordFilters() {
+        searchText = ""
+        appliedSearchText = ""
+        hasSearched = false
+        periodFilter = "전체"
+        customStartText = ""
+        customEndText = ""
+        typeFilter = "전체"
+        categoryFilter = "전체"
+        emotionFilter = "전체"
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFFF5F7FA)
@@ -288,17 +301,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     onEmotionFilterChange = { emotionFilter = it },
                     resultCount = filteredExpenses.size,
                     totalCount = expenses.size,
-                    onClearFilters = {
-                        searchText = ""
-                        appliedSearchText = ""
-                        hasSearched = false
-                        periodFilter = "전체"
-                        customStartText = ""
-                        customEndText = ""
-                        typeFilter = "전체"
-                        categoryFilter = "전체"
-                        emotionFilter = "전체"
-                    }
+                    onClearFilters = ::clearRecordFilters
                 )
             }
 
@@ -321,7 +324,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     } else {
                         EmptyRecordCard(
                             title = "조건에 맞는 기록이 없어요",
-                            message = "검색어, 기간, 유형, 카테고리, 감정 필터를 바꾸면 다른 기록을 볼 수 있습니다."
+                            message = "검색어와 필터 조건을 넓히거나 초기화하면 다른 기록을 다시 볼 수 있습니다.",
+                            actionLabel = "필터 초기화",
+                            onAction = ::clearRecordFilters
                         )
                     }
                 }
@@ -1003,7 +1008,7 @@ fun DropdownSelector(
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
             },
             modifier = Modifier
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                 .fillMaxWidth()
         )
 

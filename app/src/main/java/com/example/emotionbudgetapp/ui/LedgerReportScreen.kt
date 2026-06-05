@@ -707,15 +707,30 @@ private fun ReportEmptyState(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 20.dp),
-        color = Color(0xFFF7F8FA),
+        color = Color.White,
         shape = RoundedCornerShape(8.dp)
     ) {
-        Text(
+        Column(
             modifier = Modifier.padding(18.dp),
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF6B7280)
-        )
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "표시할 통계가 없어요",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF172033)
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF6B7280)
+            )
+            Text(
+                text = "기록 화면에서 수입/지출을 추가하면 이 월의 통계가 자동으로 채워집니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF8A94A3)
+            )
+        }
     }
 }
 
