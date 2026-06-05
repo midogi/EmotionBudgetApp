@@ -116,6 +116,12 @@ fun EmotionAnalysisScreen(
                 )
             }
 
+            if (activeEmotionStats.isNotEmpty()) {
+                item {
+                    EmotionPatternGraphCard(stats = activeEmotionStats)
+                }
+            }
+
             item {
                 EmotionDiagnosisCard(diagnosis = diagnosis)
             }
@@ -403,6 +409,136 @@ private fun EmotionDiagnosisCard(diagnosis: EmotionDiagnosis) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmotionPatternGraphCard(stats: List<EmotionStat>) {
+    val amountStats = stats
+        .sortedWith(compareByDescending<EmotionStat> { it.totalAmount }.thenByDescending { it.count })
+        .take(5)
+    val countStats = stats
+        .sortedWith(compareByDescending<EmotionStat> { it.count }.thenByDescending { it.totalAmount })
+        .take(5)
+    val maxAmount = amountStats.maxOfOrNull { it.totalAmount } ?: 1
+    val maxCount = countStats.maxOfOrNull { it.count } ?: 1
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    text = "소비 패턴 분석",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF172033)
+                )
+                Text(
+                    text = "감정별 지출 금액 및 빈도를 그래프로 시각화해요.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF64748B)
+                )
+            }
+
+            EmotionGraphGroup(
+                title = "감정별 지출 금액",
+                stats = amountStats,
+                maxValue = maxAmount,
+                valueText = { formatWon(it.totalAmount) },
+                value = { it.totalAmount },
+                barColor = Color(0xFFFF6651)
+            )
+
+            EmotionGraphGroup(
+                title = "감정별 소비 빈도",
+                stats = countStats,
+                maxValue = maxCount,
+                valueText = { "${it.count}회" },
+                value = { it.count },
+                barColor = Color(0xFF2F5D62)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmotionGraphGroup(
+    title: String,
+    stats: List<EmotionStat>,
+    maxValue: Int,
+    valueText: (EmotionStat) -> String,
+    value: (EmotionStat) -> Int,
+    barColor: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF263244)
+        )
+        stats.forEach { stat ->
+            EmotionGraphBarRow(
+                emotion = stat.emotion,
+                valueText = valueText(stat),
+                fraction = (value(stat).toFloat() / maxValue.coerceAtLeast(1).toFloat()).coerceIn(0.06f, 1f),
+                barColor = barColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmotionGraphBarRow(
+    emotion: String,
+    valueText: String,
+    fraction: Float,
+    barColor: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = emotion,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF172033)
+            )
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = barColor
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color(0xFFE2E8F0),
+                shape = RoundedCornerShape(8.dp)
+            ) {}
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(12.dp),
+                color = barColor,
+                shape = RoundedCornerShape(8.dp)
+            ) {}
         }
     }
 }
