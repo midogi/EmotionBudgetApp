@@ -76,6 +76,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     var typeFilter by remember { mutableStateOf("전체") }
     var categoryFilter by remember { mutableStateOf("전체") }
     var emotionFilter by remember { mutableStateOf("전체") }
+    var minAmountFilterText by remember { mutableStateOf("") }
+    var maxAmountFilterText by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     var pendingDeleteExpense by remember { mutableStateOf<Expense?>(null) }
 
@@ -104,6 +106,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     }
     val transactionTypeOptions = listOf(TransactionType.EXPENSE.label, TransactionType.INCOME.label)
     val periodOptions = listOf("전체", "오늘", "이번 주", "이번 달", "직접 선택")
+    val minAmountFilter = minAmountFilterText.toIntOrNull()
+    val maxAmountFilter = maxAmountFilterText.toIntOrNull()
 
     val filteredExpenses = expenses
         .filter { expense ->
@@ -136,8 +140,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
             val matchesEmotion = emotionFilter == "전체" ||
                 (expense.type == TransactionType.EXPENSE && expense.emotion == emotionFilter)
+            val matchesAmount = (minAmountFilter == null || expense.amount >= minAmountFilter) &&
+                (maxAmountFilter == null || expense.amount <= maxAmountFilter)
 
-            matchesQuery && matchesPeriod && matchesType && matchesCategory && matchesEmotion
+            matchesQuery && matchesPeriod && matchesType && matchesCategory && matchesEmotion && matchesAmount
         }
         .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
 
@@ -161,7 +167,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         customEndText.isNotBlank() ||
         typeFilter != "전체" ||
         categoryFilter != "전체" ||
-        emotionFilter != "전체"
+        emotionFilter != "전체" ||
+        minAmountFilterText.isNotBlank() ||
+        maxAmountFilterText.isNotBlank()
     val hasActiveRecordFilters = appliedSearchText.isNotBlank() || hasAdvancedFilters
 
     fun resetForm() {
@@ -184,6 +192,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         typeFilter = "전체"
         categoryFilter = "전체"
         emotionFilter = "전체"
+        minAmountFilterText = ""
+        maxAmountFilterText = ""
     }
 
     Surface(
@@ -291,6 +301,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     onCustomStartTextChange = { customStartText = it },
                     customEndText = customEndText,
                     onCustomEndTextChange = { customEndText = it },
+                    minAmountText = minAmountFilterText,
+                    onMinAmountChange = { minAmountFilterText = it.filter { char -> char.isDigit() } },
+                    maxAmountText = maxAmountFilterText,
+                    onMaxAmountChange = { maxAmountFilterText = it.filter { char -> char.isDigit() } },
                     typeFilter = typeFilter,
                     typeOptions = listOf("전체") + transactionTypeOptions,
                     onTypeFilterChange = { selectedType ->
@@ -718,6 +732,10 @@ private fun FilterCard(
     onCustomStartTextChange: (String) -> Unit,
     customEndText: String,
     onCustomEndTextChange: (String) -> Unit,
+    minAmountText: String,
+    onMinAmountChange: (String) -> Unit,
+    maxAmountText: String,
+    onMaxAmountChange: (String) -> Unit,
     typeFilter: String,
     typeOptions: List<String>,
     onTypeFilterChange: (String) -> Unit,
@@ -740,7 +758,9 @@ private fun FilterCard(
         customEndText.isNotBlank() ||
         typeFilter != "전체" ||
         categoryFilter != "전체" ||
-        emotionFilter != "전체"
+        emotionFilter != "전체" ||
+        minAmountText.isNotBlank() ||
+        maxAmountText.isNotBlank()
     val hasActiveFilters = appliedSearchText.isNotBlank() || hasNonSearchFilters
     val resultText = if (totalCount == 0) {
         "기록 없음"
@@ -913,6 +933,38 @@ private fun FilterCard(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "금액 범위",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF263244)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = minAmountText,
+                            onValueChange = onMinAmountChange,
+                            label = { Text("최소 금액") },
+                            placeholder = { Text("예: 10000") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = maxAmountText,
+                            onValueChange = onMaxAmountChange,
+                            label = { Text("최대 금액") },
+                            placeholder = { Text("예: 50000") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
 
                 DropdownSelector(
