@@ -2,6 +2,7 @@ package com.example.emotionbudgetapp
 
 import com.example.emotionbudgetapp.data.TransactionType
 import com.example.emotionbudgetapp.viewmodel.ExpenseViewModel
+import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -126,12 +127,37 @@ class ExpenseViewModelTest {
         viewModel.loadSampleData(referenceMillis = 1_700_000_000_000L)
 
         val records = viewModel.expenses.value
-        assertEquals(7, records.size)
+        assertEquals(30, records.size)
         assertEquals(1, records.first().id)
         assertEquals(TransactionType.INCOME, records.first().type)
-        assertEquals(3000000, viewModel.getIncomeTotal())
-        assertEquals(131300, viewModel.getExpenseTotal())
+        assertEquals(11900000, viewModel.getIncomeTotal())
+        assertEquals(796555, viewModel.getExpenseTotal())
+        assertEquals(5, records.count { it.type == TransactionType.INCOME })
+        assertEquals(true, records.any { monthOf(it.dateMillis) == 4 })
+        assertEquals(true, records.any { monthOf(it.dateMillis) == 5 })
+        assertEquals(true, records.any { monthOf(it.dateMillis) == 7 })
         assertEquals(true, records.any { it.emotion == "우울" && it.type == TransactionType.EXPENSE })
         assertEquals(true, records.count { it.emotion == "스트레스" && it.category == "카페" } >= 2)
+
+        val juneExpenses = records.filter {
+            it.type == TransactionType.EXPENSE && monthOf(it.dateMillis) == 6
+        }
+        assertEquals(13, juneExpenses.size)
+        assertEquals(true, juneExpenses.any { dayOfMonth(it.dateMillis) in 1..7 })
+        assertEquals(true, juneExpenses.any { dayOfMonth(it.dateMillis) in 8..14 })
+        assertEquals(true, juneExpenses.any { dayOfMonth(it.dateMillis) in 15..21 })
+        assertEquals(true, juneExpenses.any { dayOfMonth(it.dateMillis) in 22..30 })
+    }
+
+    private fun monthOf(millis: Long): Int {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+        }.get(Calendar.MONTH) + 1
+    }
+
+    private fun dayOfMonth(millis: Long): Int {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+        }.get(Calendar.DAY_OF_MONTH)
     }
 }
