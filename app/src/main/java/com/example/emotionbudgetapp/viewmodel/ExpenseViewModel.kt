@@ -116,9 +116,9 @@ class ExpenseViewModel : ViewModel() {
             Expense(
                 id = nextId++,
                 amount = 59000,
-                category = "쇼핑",
+                category = "카페",
                 emotion = "스트레스",
-                memo = "기분 전환 쇼핑",
+                memo = "스트레스 디저트",
                 dateMillis = twoDaysAgo,
                 type = TransactionType.EXPENSE
             ),
@@ -126,8 +126,8 @@ class ExpenseViewModel : ViewModel() {
                 id = nextId++,
                 amount = 14500,
                 category = "교통",
-                emotion = "평온",
-                memo = "지하철/버스",
+                emotion = "우울",
+                memo = "기분이 가라앉은 날 이동",
                 dateMillis = fourDaysAgo,
                 type = TransactionType.EXPENSE
             ),
