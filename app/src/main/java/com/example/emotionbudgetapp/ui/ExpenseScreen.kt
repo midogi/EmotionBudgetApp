@@ -752,9 +752,9 @@ private fun FilterCard(
     val searchStatusText = when {
         hasPendingSearch && trimmedSearchText.isNotBlank() -> "'$trimmedSearchText' 검색은 검색하기를 누르면 적용돼요."
         hasSearched && appliedSearchText.isBlank() && totalCount == 0 -> "검색할 기록이 아직 없어요."
-        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters && resultCount == 0 -> "현재 필터 조건에 맞는 기록이 없어요."
-        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters -> "현재 필터 조건으로 ${resultCount}개를 찾았어요."
-        hasSearched && appliedSearchText.isBlank() -> "전체 기록 ${resultCount}개를 보여주고 있어요."
+        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters && resultCount == 0 -> "조건에 맞는 검색 결과가 없어요."
+        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters -> "검색 결과 ${resultCount}개를 아래에 보여주고 있어요."
+        hasSearched && appliedSearchText.isBlank() -> "검색 결과로 전체 기록 ${resultCount}개를 아래에 보여주고 있어요."
         hasSearched && resultCount > 0 -> "'$appliedSearchText' 검색 결과 ${resultCount}개를 아래에 보여주고 있어요."
         hasSearched -> "'$appliedSearchText'에 해당하는 기록이 없어요."
         else -> "검색어를 입력하고 검색하기를 누르면 결과가 표시돼요."
@@ -812,7 +812,11 @@ private fun FilterCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (hasActiveFilters) "현재 조건 결과" else "전체 기록",
+                        text = when {
+                            hasSearched -> "검색 결과"
+                            hasActiveFilters -> "현재 조건 결과"
+                            else -> "전체 기록"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF5D6B82)
                     )
@@ -973,7 +977,7 @@ private fun SectionTitle(
     hasActiveFilters: Boolean
 ) {
     val title = when {
-        hasSearched && appliedSearchText.isNotBlank() -> "검색 결과"
+        hasSearched -> "검색 결과"
         hasActiveFilters -> "필터 결과"
         else -> "최근 기록"
     }
