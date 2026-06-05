@@ -156,6 +156,13 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         .groupBy { it.category }
         .map { entry -> entry.key to entry.value.sumOf { it.amount } }
         .sortedByDescending { it.second }
+    val hasAdvancedFilters = periodFilter != "전체" ||
+        customStartText.isNotBlank() ||
+        customEndText.isNotBlank() ||
+        typeFilter != "전체" ||
+        categoryFilter != "전체" ||
+        emotionFilter != "전체"
+    val hasActiveRecordFilters = appliedSearchText.isNotBlank() || hasAdvancedFilters
 
     fun resetForm() {
         transactionType = TransactionType.EXPENSE
@@ -308,7 +315,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             item {
                 SectionTitle(
                     recordCount = filteredExpenses.size,
-                    totalCount = expenses.size
+                    totalCount = expenses.size,
+                    hasSearched = hasSearched,
+                    appliedSearchText = appliedSearchText,
+                    hasActiveFilters = hasActiveRecordFilters
                 )
             }
 
@@ -721,6 +731,7 @@ private fun FilterCard(
     totalCount: Int,
     onClearFilters: () -> Unit
 ) {
+    var showAdvancedFilters by remember { mutableStateOf(false) }
     val showEmotionFilter = typeFilter != TransactionType.INCOME.label
     val trimmedSearchText = searchText.trim()
     val hasPendingSearch = trimmedSearchText != appliedSearchText
@@ -744,7 +755,7 @@ private fun FilterCard(
         hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters && resultCount == 0 -> "현재 필터 조건에 맞는 기록이 없어요."
         hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters -> "현재 필터 조건으로 ${resultCount}개를 찾았어요."
         hasSearched && appliedSearchText.isBlank() -> "전체 기록 ${resultCount}개를 보여주고 있어요."
-        hasSearched && resultCount > 0 -> "'$appliedSearchText' 검색 결과 ${resultCount}개를 찾았어요."
+        hasSearched && resultCount > 0 -> "'$appliedSearchText' 검색 결과 ${resultCount}개를 아래에 보여주고 있어요."
         hasSearched -> "'$appliedSearchText'에 해당하는 기록이 없어요."
         else -> "검색어를 입력하고 검색하기를 누르면 결과가 표시돼요."
     }
@@ -844,78 +855,108 @@ private fun FilterCard(
                 )
             }
 
-            DropdownSelector(
-                label = "기간",
-                selectedValue = periodFilter,
-                options = periodOptions,
-                onSelected = onPeriodFilterChange,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (periodFilter == "직접 선택") {
-                OutlinedTextField(
-                    value = customStartText,
-                    onValueChange = onCustomStartTextChange,
-                    label = { Text("시작일") },
-                    placeholder = { Text("예: 2026.06.01") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = customEndText,
-                    onValueChange = onCustomEndTextChange,
-                    label = { Text("종료일") },
-                    placeholder = { Text("예: 2026.06.30") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "상세 필터",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF263244)
+                    )
+                    if (hasNonSearchFilters) {
+                        Text(
+                            text = "적용 중",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFF6F52B5)
+                        )
+                    }
+                }
+                TextButton(onClick = { showAdvancedFilters = !showAdvancedFilters }) {
+                    Text(if (showAdvancedFilters || hasNonSearchFilters) "접기" else "열기")
+                }
             }
 
-            DropdownSelector(
-                label = "유형",
-                selectedValue = typeFilter,
-                options = typeOptions,
-                onSelected = onTypeFilterChange,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (showAdvancedFilters || hasNonSearchFilters) {
+                DropdownSelector(
+                    label = "기간",
+                    selectedValue = periodFilter,
+                    options = periodOptions,
+                    onSelected = onPeriodFilterChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            if (showEmotionFilter) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                if (periodFilter == "직접 선택") {
+                    OutlinedTextField(
+                        value = customStartText,
+                        onValueChange = onCustomStartTextChange,
+                        label = { Text("시작일") },
+                        placeholder = { Text("예: 2026.06.01") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customEndText,
+                        onValueChange = onCustomEndTextChange,
+                        label = { Text("종료일") },
+                        placeholder = { Text("예: 2026.06.30") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                DropdownSelector(
+                    label = "유형",
+                    selectedValue = typeFilter,
+                    options = typeOptions,
+                    onSelected = onTypeFilterChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (showEmotionFilter) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DropdownSelector(
+                            label = "카테고리",
+                            selectedValue = categoryFilter,
+                            options = categoryOptions,
+                            onSelected = onCategoryFilterChange,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DropdownSelector(
+                            label = "지출 감정",
+                            selectedValue = emotionFilter,
+                            options = emotionOptions,
+                            onSelected = onEmotionFilterChange,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
                     DropdownSelector(
                         label = "카테고리",
                         selectedValue = categoryFilter,
                         options = categoryOptions,
                         onSelected = onCategoryFilterChange,
-                        modifier = Modifier.weight(1f)
-                    )
-                    DropdownSelector(
-                        label = "지출 감정",
-                        selectedValue = emotionFilter,
-                        options = emotionOptions,
-                        onSelected = onEmotionFilterChange,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-            } else {
-                DropdownSelector(
-                    label = "카테고리",
-                    selectedValue = categoryFilter,
-                    options = categoryOptions,
-                    onSelected = onCategoryFilterChange,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
-            if (hasActiveFilters) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onClearFilters) {
-                        Text("필터 초기화")
+                if (hasActiveFilters) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onClearFilters) {
+                            Text("필터 초기화")
+                        }
                     }
                 }
             }
@@ -924,13 +965,24 @@ private fun FilterCard(
 }
 
 @Composable
-private fun SectionTitle(recordCount: Int, totalCount: Int) {
+private fun SectionTitle(
+    recordCount: Int,
+    totalCount: Int,
+    hasSearched: Boolean,
+    appliedSearchText: String,
+    hasActiveFilters: Boolean
+) {
+    val title = when {
+        hasSearched && appliedSearchText.isNotBlank() -> "검색 결과"
+        hasActiveFilters -> "필터 결과"
+        else -> "최근 기록"
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "최근 기록",
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF172033)
