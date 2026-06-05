@@ -53,10 +53,10 @@ import java.util.TimeZone
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseScreen(viewModel: ExpenseViewModel) {
-    // ViewModel의 StateFlow를 Compose State로 바꿔서 화면이 목록 변화를 자동으로 따라가게 한다.
+    // ViewModel의 StateFlow를 Compose State로 바꿔서 기록 추가/수정/삭제가 바로 화면에 반영되게 한다.
     val expenses by viewModel.expenses.collectAsState()
 
-    // 입력 폼 상태. remember를 쓰면 화면이 다시 그려져도 사용자가 입력 중인 값이 유지된다.
+    // 입력 폼 상태. remember를 쓰면 화면이 다시 그려져도 입력 중인 값이 유지된다.
     var transactionType by remember { mutableStateOf(TransactionType.EXPENSE) }
     var amountText by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("식비") }
@@ -65,7 +65,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     var selectedDateMillis by remember { mutableStateOf(todayMillis()) }
     var editingExpenseId by remember { mutableStateOf<Int?>(null) }
 
-    // 검색/필터/다이얼로그처럼 화면 동작을 제어하는 상태들.
+    // 기록 찾기 상태. 검색어와 필터 값이 바뀌면 filteredExpenses가 다시 계산된다.
     var searchText by remember { mutableStateOf("") }
     var periodFilter by remember { mutableStateOf("전체") }
     var customStartText by remember { mutableStateOf("") }
@@ -76,26 +76,52 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     var showDatePicker by remember { mutableStateOf(false) }
     var pendingDeleteExpense by remember { mutableStateOf<Expense?>(null) }
 
-    // 입력 폼과 필터 드롭다운에서 같이 쓰는 기본 선택지.
+    // 입력 폼의 기본 선택지. 필터 선택지는 실제 기록 데이터까지 합쳐서 아래에서 다시 만든다.
     val expenseCategories = listOf("식비", "교통", "쇼핑", "카페", "문화", "기타")
     val incomeCategories = listOf("급여", "용돈", "부수입", "환급", "기타")
+    val baseEmotions = listOf("기쁨", "슬픔", "우울", "스트레스", "외로움", "평온", "분노")
     val activeCategories = if (transactionType == TransactionType.INCOME) incomeCategories else expenseCategories
-    val allCategories = (expenseCategories + incomeCategories).distinct()
-    val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
+    val emotions = (baseEmotions + expenses
+        .filter { it.type == TransactionType.EXPENSE }
+        .map { it.emotion })
+        .distinct()
+    val expenseFilterCategories = (expenseCategories + expenses
+        .filter { it.type == TransactionType.EXPENSE }
+        .map { it.category })
+        .distinct()
+    val incomeFilterCategories = (incomeCategories + expenses
+        .filter { it.type == TransactionType.INCOME }
+        .map { it.category })
+        .distinct()
+    val allCategories = (expenseFilterCategories + incomeFilterCategories).distinct()
+    val visibleFilterCategories = when (typeFilter) {
+        TransactionType.INCOME.label -> incomeFilterCategories
+        TransactionType.EXPENSE.label -> expenseFilterCategories
+        else -> allCategories
+    }
     val transactionTypeOptions = listOf(TransactionType.EXPENSE.label, TransactionType.INCOME.label)
     val periodOptions = listOf("전체", "오늘", "이번 주", "이번 달", "직접 선택")
 
-    // 검색어, 기간 필터, 타입 필터, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
     val filteredExpenses = expenses
         .filter { expense ->
             val query = searchText.trim()
+            val compactQuery = query
+                .replace(",", "")
+                .replace("원", "")
+                .replace("+", "")
+                .replace("-", "")
+                .trim()
+
+            // 검색어는 유형, 카테고리, 감정, 메모, 날짜, 금액 표기까지 모두 대상으로 삼는다.
             val matchesQuery = query.isBlank() ||
                 expense.type.label.contains(query, ignoreCase = true) ||
                 expense.category.contains(query, ignoreCase = true) ||
                 expense.emotion.contains(query, ignoreCase = true) ||
                 expense.memo.contains(query, ignoreCase = true) ||
-                expense.amount.toString().contains(query) ||
-                formatDate(expense.dateMillis).contains(query)
+                formatDate(expense.dateMillis).contains(query) ||
+                formatWon(expense.amount).contains(query) ||
+                formatSignedSearchWon(expense).contains(query) ||
+                (compactQuery.isNotBlank() && expense.amount.toString().contains(compactQuery))
 
             val matchesPeriod = matchesPeriodFilter(
                 millis = expense.dateMillis,
@@ -112,7 +138,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         }
         .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
 
-    // 상단 요약 카드와 카테고리 요약 카드는 현재 필터 결과를 기준으로 보여준다.
     val incomeRecords = filteredExpenses.filter { it.type == TransactionType.INCOME }
     val expenseRecords = filteredExpenses.filter { it.type == TransactionType.EXPENSE }
     val incomeTotal = incomeRecords.sumOf { it.amount }
@@ -129,12 +154,11 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         .map { entry -> entry.key to entry.value.sumOf { it.amount } }
         .sortedByDescending { it.second }
 
-    // 추가/수정이 끝난 뒤 입력 폼을 처음 상태로 되돌린다.
     fun resetForm() {
         transactionType = TransactionType.EXPENSE
         amountText = ""
         category = expenseCategories.first()
-        emotion = emotions.first()
+        emotion = baseEmotions.first()
         memo = ""
         selectedDateMillis = todayMillis()
         editingExpenseId = null
@@ -172,7 +196,11 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     transactionTypeOptions = transactionTypeOptions,
                     onTransactionTypeChange = { selectedLabel ->
                         transactionType = transactionTypeFromLabel(selectedLabel)
-                        category = if (transactionType == TransactionType.INCOME) incomeCategories.first() else expenseCategories.first()
+                        category = if (transactionType == TransactionType.INCOME) {
+                            incomeCategories.first()
+                        } else {
+                            expenseCategories.first()
+                        }
                         if (transactionType == TransactionType.INCOME) {
                             emotion = "평온"
                         }
@@ -199,7 +227,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                             val editingId = editingExpenseId
                             val savedEmotion = if (transactionType == TransactionType.INCOME) "평온" else emotion
                             if (editingId == null) {
-                                // 수정 중인 id가 없으면 새 수입/지출 기록을 추가한다.
                                 viewModel.addExpense(
                                     amount = amount,
                                     category = category,
@@ -209,7 +236,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                                     type = transactionType
                                 )
                             } else {
-                                // 수정 중이면 같은 id의 기록만 새 입력값으로 교체한다.
                                 viewModel.updateExpense(
                                     id = editingId,
                                     amount = amount,
@@ -241,16 +267,19 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     typeOptions = listOf("전체") + transactionTypeOptions,
                     onTypeFilterChange = { selectedType ->
                         typeFilter = selectedType
+                        categoryFilter = "전체"
                         if (selectedType == TransactionType.INCOME.label) {
                             emotionFilter = "전체"
                         }
                     },
                     categoryFilter = categoryFilter,
-                    categoryOptions = listOf("전체") + allCategories,
+                    categoryOptions = listOf("전체") + visibleFilterCategories,
                     onCategoryFilterChange = { categoryFilter = it },
                     emotionFilter = emotionFilter,
                     emotionOptions = listOf("전체") + emotions,
                     onEmotionFilterChange = { emotionFilter = it },
+                    resultCount = filteredExpenses.size,
+                    totalCount = expenses.size,
                     onClearFilters = {
                         searchText = ""
                         periodFilter = "전체"
@@ -282,7 +311,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     } else {
                         EmptyRecordCard(
                             title = "조건에 맞는 기록이 없어요",
-                            message = "검색어나 필터를 바꾸면 다른 기록을 볼 수 있습니다."
+                            message = "검색어, 기간, 유형, 카테고리, 감정 필터를 바꾸면 다른 기록을 볼 수 있습니다."
                         )
                     }
                 }
@@ -291,7 +320,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     ExpenseItem(
                         expense = expense,
                         onEdit = {
-                            // 선택한 기록의 값을 입력 폼에 다시 채워 수정 모드로 전환한다.
                             transactionType = expense.type
                             amountText = expense.amount.toString()
                             category = expense.category
@@ -301,7 +329,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                             editingExpenseId = expense.id
                         },
                         onDelete = {
-                            // 바로 삭제하지 않고 확인 다이얼로그를 띄우기 위해 임시 상태에 담는다.
                             pendingDeleteExpense = expense
                         }
                     )
@@ -346,7 +373,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        // Material DatePicker는 UTC 기준 millis를 돌려주기 때문에 로컬 날짜로 다시 변환한다.
                         selectedDateMillis = fromDatePickerUtcMillis(
                             datePickerState.selectedDateMillis ?: toDatePickerUtcMillis(selectedDateMillis)
                         )
@@ -673,9 +699,25 @@ private fun FilterCard(
     emotionFilter: String,
     emotionOptions: List<String>,
     onEmotionFilterChange: (String) -> Unit,
+    resultCount: Int,
+    totalCount: Int,
     onClearFilters: () -> Unit
 ) {
     val showEmotionFilter = typeFilter != TransactionType.INCOME.label
+    val hasActiveFilters = searchText.isNotBlank() ||
+        periodFilter != "전체" ||
+        customStartText.isNotBlank() ||
+        customEndText.isNotBlank() ||
+        typeFilter != "전체" ||
+        categoryFilter != "전체" ||
+        emotionFilter != "전체"
+    val resultText = if (totalCount == 0) {
+        "기록 없음"
+    } else if (hasActiveFilters) {
+        "${resultCount}/${totalCount}개"
+    } else {
+        "${totalCount}개"
+    }
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -687,12 +729,50 @@ private fun FilterCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "기록 찾기",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF172033)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "기록 찾기",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF172033)
+                )
+                Text(
+                    text = resultText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF2F5D62)
+                )
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFF1F5F9),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (hasActiveFilters) "현재 조건 결과" else "전체 기록",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF5D6B82)
+                    )
+                    Text(
+                        text = resultText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF172033)
+                    )
+                }
+            }
 
             OutlinedTextField(
                 value = searchText,
@@ -768,15 +848,7 @@ private fun FilterCard(
                 )
             }
 
-            if (
-                searchText.isNotBlank() ||
-                periodFilter != "전체" ||
-                customStartText.isNotBlank() ||
-                customEndText.isNotBlank() ||
-                typeFilter != "전체" ||
-                categoryFilter != "전체" ||
-                emotionFilter != "전체"
-            ) {
+            if (hasActiveFilters) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -860,7 +932,7 @@ fun DropdownSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    // Material3의 ExposedDropdownMenuBox는 TextField처럼 보이지만 클릭하면 메뉴가 펼쳐지는 UI다.
+    // TextField처럼 보이지만 클릭하면 선택 메뉴가 펼쳐지는 Material3 기본 드롭다운이다.
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
@@ -945,6 +1017,11 @@ private fun formatSignedWon(amount: Int): String {
     return if (amount < 0) "-${formatWon(-amount)}" else formatWon(amount)
 }
 
+private fun formatSignedSearchWon(expense: Expense): String {
+    val prefix = if (expense.type == TransactionType.INCOME) "+" else "-"
+    return prefix + formatWon(expense.amount)
+}
+
 private fun formatDate(millis: Long): String {
     return SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).format(Date(millis))
 }
@@ -954,7 +1031,6 @@ private fun todayMillis(): Long {
 }
 
 private fun normalizeDay(millis: Long): Long {
-    // 시간/분/초를 0으로 맞춰 같은 날짜는 항상 같은 millis로 비교되게 한다.
     return Calendar.getInstance().apply {
         timeInMillis = millis
         set(Calendar.HOUR_OF_DAY, 0)
@@ -1007,7 +1083,6 @@ private fun addMonths(millis: Long, amount: Int): Long {
 }
 
 private fun toDatePickerUtcMillis(localDayMillis: Long): Long {
-    // DatePicker는 UTC 기준 날짜를 기대하므로 로컬 날짜의 연/월/일만 UTC 달력에 옮긴다.
     val local = Calendar.getInstance().apply { timeInMillis = localDayMillis }
     return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
         clear()
@@ -1023,7 +1098,6 @@ private fun toDatePickerUtcMillis(localDayMillis: Long): Long {
 }
 
 private fun fromDatePickerUtcMillis(utcMillis: Long): Long {
-    // DatePicker가 돌려준 UTC 날짜의 연/월/일을 다시 로컬 시간대의 하루 시작으로 변환한다.
     val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
     return Calendar.getInstance().apply {
         clear()
