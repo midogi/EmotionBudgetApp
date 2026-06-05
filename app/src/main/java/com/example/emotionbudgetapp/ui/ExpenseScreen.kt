@@ -65,8 +65,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     var selectedDateMillis by remember { mutableStateOf(todayMillis()) }
     var editingExpenseId by remember { mutableStateOf<Int?>(null) }
 
-    // 기록 찾기 상태. 검색어와 필터 값이 바뀌면 filteredExpenses가 다시 계산된다.
+    // 기록 찾기 상태. 검색어는 검색하기를 눌렀을 때 적용하고, 필터는 선택 즉시 다시 계산한다.
     var searchText by remember { mutableStateOf("") }
+    var appliedSearchText by remember { mutableStateOf("") }
+    var hasSearched by remember { mutableStateOf(false) }
     var periodFilter by remember { mutableStateOf("전체") }
     var customStartText by remember { mutableStateOf("") }
     var customEndText by remember { mutableStateOf("") }
@@ -104,7 +106,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
     val filteredExpenses = expenses
         .filter { expense ->
-            val query = searchText.trim()
+            val query = appliedSearchText.trim()
             val compactQuery = query
                 .replace(",", "")
                 .replace("원", "")
@@ -256,6 +258,12 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                 FilterCard(
                     searchText = searchText,
                     onSearchTextChange = { searchText = it },
+                    appliedSearchText = appliedSearchText,
+                    hasSearched = hasSearched,
+                    onSearchSubmit = {
+                        appliedSearchText = searchText.trim()
+                        hasSearched = true
+                    },
                     periodFilter = periodFilter,
                     periodOptions = periodOptions,
                     onPeriodFilterChange = { periodFilter = it },
@@ -282,6 +290,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     totalCount = expenses.size,
                     onClearFilters = {
                         searchText = ""
+                        appliedSearchText = ""
+                        hasSearched = false
                         periodFilter = "전체"
                         customStartText = ""
                         customEndText = ""
@@ -683,6 +693,9 @@ private fun ExpenseInputCard(
 private fun FilterCard(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
+    appliedSearchText: String,
+    hasSearched: Boolean,
+    onSearchSubmit: () -> Unit,
     periodFilter: String,
     periodOptions: List<String>,
     onPeriodFilterChange: (String) -> Unit,
@@ -704,19 +717,41 @@ private fun FilterCard(
     onClearFilters: () -> Unit
 ) {
     val showEmotionFilter = typeFilter != TransactionType.INCOME.label
-    val hasActiveFilters = searchText.isNotBlank() ||
-        periodFilter != "전체" ||
+    val trimmedSearchText = searchText.trim()
+    val hasPendingSearch = trimmedSearchText != appliedSearchText
+    val hasNonSearchFilters = periodFilter != "전체" ||
         customStartText.isNotBlank() ||
         customEndText.isNotBlank() ||
         typeFilter != "전체" ||
         categoryFilter != "전체" ||
         emotionFilter != "전체"
+    val hasActiveFilters = appliedSearchText.isNotBlank() || hasNonSearchFilters
     val resultText = if (totalCount == 0) {
         "기록 없음"
     } else if (hasActiveFilters) {
         "${resultCount}/${totalCount}개"
     } else {
         "${totalCount}개"
+    }
+    val searchStatusText = when {
+        hasPendingSearch && trimmedSearchText.isNotBlank() -> "'$trimmedSearchText' 검색은 검색하기를 누르면 적용돼요."
+        hasSearched && appliedSearchText.isBlank() && totalCount == 0 -> "검색할 기록이 아직 없어요."
+        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters && resultCount == 0 -> "현재 필터 조건에 맞는 기록이 없어요."
+        hasSearched && appliedSearchText.isBlank() && hasNonSearchFilters -> "현재 필터 조건으로 ${resultCount}개를 찾았어요."
+        hasSearched && appliedSearchText.isBlank() -> "전체 기록 ${resultCount}개를 보여주고 있어요."
+        hasSearched && resultCount > 0 -> "'$appliedSearchText' 검색 결과 ${resultCount}개를 찾았어요."
+        hasSearched -> "'$appliedSearchText'에 해당하는 기록이 없어요."
+        else -> "검색어를 입력하고 검색하기를 누르면 결과가 표시돼요."
+    }
+    val searchStatusColor = if (hasSearched && !hasPendingSearch && resultCount == 0) {
+        Color(0xFFB91C1C)
+    } else {
+        Color(0xFF2F5D62)
+    }
+    val searchStatusBackground = if (hasSearched && !hasPendingSearch && resultCount == 0) {
+        Color(0xFFFFF1F2)
+    } else {
+        Color(0xFFF1F5F9)
     }
 
     ElevatedCard(
@@ -782,6 +817,27 @@ private fun FilterCard(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Button(
+                onClick = onSearchSubmit,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("검색하기")
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = searchStatusBackground,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = searchStatusText,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = searchStatusColor
+                )
+            }
 
             DropdownSelector(
                 label = "기간",
