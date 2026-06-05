@@ -67,6 +67,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
 
     // 검색/필터/다이얼로그처럼 화면 동작을 제어하는 상태들.
     var searchText by remember { mutableStateOf("") }
+    var periodFilter by remember { mutableStateOf("전체") }
+    var customStartText by remember { mutableStateOf("") }
+    var customEndText by remember { mutableStateOf("") }
     var typeFilter by remember { mutableStateOf("전체") }
     var categoryFilter by remember { mutableStateOf("전체") }
     var emotionFilter by remember { mutableStateOf("전체") }
@@ -80,10 +83,38 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
     val allCategories = (expenseCategories + incomeCategories).distinct()
     val emotions = listOf("기쁨", "슬픔", "스트레스", "외로움", "평온", "분노")
     val transactionTypeOptions = listOf(TransactionType.EXPENSE.label, TransactionType.INCOME.label)
+    val periodOptions = listOf("전체", "오늘", "이번 주", "이번 달", "직접 선택")
 
-    // 상단 요약 카드와 카테고리 요약 카드에 쓰는 파생 데이터.
-    val incomeRecords = expenses.filter { it.type == TransactionType.INCOME }
-    val expenseRecords = expenses.filter { it.type == TransactionType.EXPENSE }
+    // 검색어, 기간 필터, 타입 필터, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
+    val filteredExpenses = expenses
+        .filter { expense ->
+            val query = searchText.trim()
+            val matchesQuery = query.isBlank() ||
+                expense.type.label.contains(query, ignoreCase = true) ||
+                expense.category.contains(query, ignoreCase = true) ||
+                expense.emotion.contains(query, ignoreCase = true) ||
+                expense.memo.contains(query, ignoreCase = true) ||
+                expense.amount.toString().contains(query) ||
+                formatDate(expense.dateMillis).contains(query)
+
+            val matchesPeriod = matchesPeriodFilter(
+                millis = expense.dateMillis,
+                periodFilter = periodFilter,
+                customStartText = customStartText,
+                customEndText = customEndText
+            )
+            val matchesType = typeFilter == "전체" || expense.type.label == typeFilter
+            val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
+            val matchesEmotion = emotionFilter == "전체" ||
+                (expense.type == TransactionType.EXPENSE && expense.emotion == emotionFilter)
+
+            matchesQuery && matchesPeriod && matchesType && matchesCategory && matchesEmotion
+        }
+        .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
+
+    // 상단 요약 카드와 카테고리 요약 카드는 현재 필터 결과를 기준으로 보여준다.
+    val incomeRecords = filteredExpenses.filter { it.type == TransactionType.INCOME }
+    val expenseRecords = filteredExpenses.filter { it.type == TransactionType.EXPENSE }
     val incomeTotal = incomeRecords.sumOf { it.amount }
     val expenseTotal = expenseRecords.sumOf { it.amount }
     val balance = incomeTotal - expenseTotal
@@ -97,27 +128,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
         .groupBy { it.category }
         .map { entry -> entry.key to entry.value.sumOf { it.amount } }
         .sortedByDescending { it.second }
-
-    // 검색어, 타입 필터, 카테고리 필터, 감정 필터를 모두 만족하는 기록만 목록에 보여준다.
-    val filteredExpenses = expenses
-        .filter { expense ->
-            val query = searchText.trim()
-            val matchesQuery = query.isBlank() ||
-                expense.type.label.contains(query, ignoreCase = true) ||
-                expense.category.contains(query, ignoreCase = true) ||
-                expense.emotion.contains(query, ignoreCase = true) ||
-                expense.memo.contains(query, ignoreCase = true) ||
-                expense.amount.toString().contains(query) ||
-                formatDate(expense.dateMillis).contains(query)
-
-            val matchesType = typeFilter == "전체" || expense.type.label == typeFilter
-            val matchesCategory = categoryFilter == "전체" || expense.category == categoryFilter
-            val matchesEmotion = emotionFilter == "전체" ||
-                (expense.type == TransactionType.EXPENSE && expense.emotion == emotionFilter)
-
-            matchesQuery && matchesType && matchesCategory && matchesEmotion
-        }
-        .sortedWith(compareByDescending<Expense> { it.dateMillis }.thenByDescending { it.id })
 
     // 추가/수정이 끝난 뒤 입력 폼을 처음 상태로 되돌린다.
     fun resetForm() {
@@ -144,7 +154,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     incomeTotal = incomeTotal,
                     expenseTotal = expenseTotal,
                     balance = balance,
-                    recordCount = expenses.size,
+                    recordCount = filteredExpenses.size,
                     topEmotion = topEmotion,
                     biggestExpenseAmount = biggestExpenseAmount
                 )
@@ -220,6 +230,13 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                 FilterCard(
                     searchText = searchText,
                     onSearchTextChange = { searchText = it },
+                    periodFilter = periodFilter,
+                    periodOptions = periodOptions,
+                    onPeriodFilterChange = { periodFilter = it },
+                    customStartText = customStartText,
+                    onCustomStartTextChange = { customStartText = it },
+                    customEndText = customEndText,
+                    onCustomEndTextChange = { customEndText = it },
                     typeFilter = typeFilter,
                     typeOptions = listOf("전체") + transactionTypeOptions,
                     onTypeFilterChange = { selectedType ->
@@ -236,6 +253,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel) {
                     onEmotionFilterChange = { emotionFilter = it },
                     onClearFilters = {
                         searchText = ""
+                        periodFilter = "전체"
+                        customStartText = ""
+                        customEndText = ""
                         typeFilter = "전체"
                         categoryFilter = "전체"
                         emotionFilter = "전체"
@@ -637,6 +657,13 @@ private fun ExpenseInputCard(
 private fun FilterCard(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
+    periodFilter: String,
+    periodOptions: List<String>,
+    onPeriodFilterChange: (String) -> Unit,
+    customStartText: String,
+    onCustomStartTextChange: (String) -> Unit,
+    customEndText: String,
+    onCustomEndTextChange: (String) -> Unit,
     typeFilter: String,
     typeOptions: List<String>,
     onTypeFilterChange: (String) -> Unit,
@@ -677,6 +704,33 @@ private fun FilterCard(
             )
 
             DropdownSelector(
+                label = "기간",
+                selectedValue = periodFilter,
+                options = periodOptions,
+                onSelected = onPeriodFilterChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (periodFilter == "직접 선택") {
+                OutlinedTextField(
+                    value = customStartText,
+                    onValueChange = onCustomStartTextChange,
+                    label = { Text("시작일") },
+                    placeholder = { Text("예: 2026.06.01") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = customEndText,
+                    onValueChange = onCustomEndTextChange,
+                    label = { Text("종료일") },
+                    placeholder = { Text("예: 2026.06.30") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            DropdownSelector(
                 label = "유형",
                 selectedValue = typeFilter,
                 options = typeOptions,
@@ -714,7 +768,15 @@ private fun FilterCard(
                 )
             }
 
-            if (searchText.isNotBlank() || typeFilter != "전체" || categoryFilter != "전체" || emotionFilter != "전체") {
+            if (
+                searchText.isNotBlank() ||
+                periodFilter != "전체" ||
+                customStartText.isNotBlank() ||
+                customEndText.isNotBlank() ||
+                typeFilter != "전체" ||
+                categoryFilter != "전체" ||
+                emotionFilter != "전체"
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -838,6 +900,43 @@ private fun transactionTypeFromLabel(label: String): TransactionType {
     return if (label == TransactionType.INCOME.label) TransactionType.INCOME else TransactionType.EXPENSE
 }
 
+private fun matchesPeriodFilter(
+    millis: Long,
+    periodFilter: String,
+    customStartText: String,
+    customEndText: String
+): Boolean {
+    val dayMillis = normalizeDay(millis)
+    val today = todayMillis()
+    return when (periodFilter) {
+        "오늘" -> dayMillis == today
+        "이번 주" -> dayMillis >= startOfWeek(today) && dayMillis < addDays(startOfWeek(today), 7)
+        "이번 달" -> {
+            val monthStart = startOfMonth(today)
+            dayMillis >= monthStart && dayMillis < addMonths(monthStart, 1)
+        }
+        "직접 선택" -> matchesCustomDateRange(dayMillis, customStartText, customEndText)
+        else -> true
+    }
+}
+
+private fun matchesCustomDateRange(dayMillis: Long, customStartText: String, customEndText: String): Boolean {
+    val startMillis = parseFilterDate(customStartText)?.let { normalizeDay(it) }
+    val endMillis = parseFilterDate(customEndText)?.let { normalizeDay(it) }
+    return (startMillis == null || dayMillis >= startMillis) &&
+        (endMillis == null || dayMillis <= endMillis)
+}
+
+private fun parseFilterDate(text: String): Long? {
+    val trimmed = text.trim()
+    if (trimmed.isBlank()) return null
+    return runCatching {
+        SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).apply {
+            isLenient = false
+        }.parse(trimmed)?.time
+    }.getOrNull()
+}
+
 private fun formatWon(amount: Int): String {
     return NumberFormat.getNumberInstance(Locale.KOREA).format(amount) + "원"
 }
@@ -858,6 +957,48 @@ private fun normalizeDay(millis: Long): Long {
     // 시간/분/초를 0으로 맞춰 같은 날짜는 항상 같은 millis로 비교되게 한다.
     return Calendar.getInstance().apply {
         timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun startOfWeek(millis: Long): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = normalizeDay(millis)
+        firstDayOfWeek = Calendar.MONDAY
+        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun startOfMonth(millis: Long): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun addDays(millis: Long, amount: Int): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        add(Calendar.DAY_OF_MONTH, amount)
+    }.timeInMillis
+}
+
+private fun addMonths(millis: Long, amount: Int): Long {
+    return Calendar.getInstance().apply {
+        timeInMillis = millis
+        add(Calendar.MONTH, amount)
+        set(Calendar.DAY_OF_MONTH, 1)
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
