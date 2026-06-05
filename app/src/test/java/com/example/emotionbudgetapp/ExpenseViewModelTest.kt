@@ -131,6 +131,7 @@ class ExpenseViewModelTest {
         assertEquals(TransactionType.INCOME, records.first().type)
         assertEquals(3000000, viewModel.getIncomeTotal())
         assertEquals(131300, viewModel.getExpenseTotal())
-        assertEquals(true, records.any { it.emotion == "스트레스" && it.type == TransactionType.EXPENSE })
+        assertEquals(true, records.any { it.emotion == "우울" && it.type == TransactionType.EXPENSE })
+        assertEquals(true, records.count { it.emotion == "스트레스" && it.category == "카페" } >= 2)
     }
 }
